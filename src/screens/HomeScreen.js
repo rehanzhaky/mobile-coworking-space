@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,13 @@ import {
   FlatList,
   SafeAreaView,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
+import ApiService from '../services/api';
+import { Platform } from 'react-native';
 
 const SearchIcon = () => (
   <Image
@@ -101,15 +106,207 @@ const categories = [
   { id: 'layanan', label: 'Layanan' },
 ];
 
+// Function to get base URL for images
+const getImageBaseURL = () => {
+  let baseUrl;
+  if (Platform.OS === 'android') {
+    // For real device, use actual IP address
+    baseUrl = 'http://192.168.1.11:5000';
+  } else if (Platform.OS === 'ios') {
+    // For iOS device, use actual IP address
+    baseUrl = 'http://192.168.1.11:5000';
+  } else {
+    baseUrl = 'http://192.168.1.11:5000';
+  }
+
+  console.log('Image base URL:', baseUrl);
+  return baseUrl;
+};
+
 export default function HomeScreen({ navigation }) {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [search, setSearch] = useState('');
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [promotions, setPromotions] = useState([]);
+  const [loadingPromotions, setLoadingPromotions] = useState(true);
+  const [notificationTapCount, setNotificationTapCount] = useState(0);
 
-  // Dummy filtered data
+  useEffect(() => {
+    fetchItems();
+    fetchPromotions();
+  }, []);
+
+  // Refresh promotions when screen is focused (untuk update real-time dari admin)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('HomeScreen focused - refreshing promotions');
+      fetchPromotions();
+    }, []),
+  );
+
+  const fetchItems = async () => {
+    try {
+      setLoading(true);
+      const result = await ApiService.getItems();
+      if (result.success) {
+        console.log('HomeScreen: Items loaded:', result.data.length);
+        console.log('HomeScreen: Sample item:', result.data[0]);
+        setItems(result.data);
+      } else {
+        console.error('HomeScreen: Failed to load items');
+        Alert.alert('Error', 'Gagal memuat data produk');
+      }
+    } catch (error) {
+      console.error('HomeScreen: Error fetching items:', error);
+      Alert.alert('Error', 'Gagal memuat data produk');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPromotions = async () => {
+    try {
+      setLoadingPromotions(true);
+      console.log('HomeScreen: Fetching promotions from API...');
+      const result = await ApiService.getPromotions();
+      if (result.success) {
+        console.log(
+          'HomeScreen: Promotions loaded successfully:',
+          result.data.length,
+        );
+        if (result.data.length > 0) {
+          console.log('HomeScreen: Sample promotion:', result.data[0]);
+          console.log(
+            'HomeScreen: Sample promotion image URL:',
+            result.data[0]?.imageUrl,
+          );
+          console.log('HomeScreen: All promotions:', result.data);
+        }
+        setPromotions(result.data);
+      } else {
+        console.error('HomeScreen: API returned success=false for promotions');
+        console.error('HomeScreen: Result:', result);
+        // Don't show alert for promotions, just use fallback
+      }
+    } catch (error) {
+      console.error('HomeScreen: Error fetching promotions:', error);
+      console.error('HomeScreen: Error details:', error.message);
+      // Don't show alert for promotions, just use fallback
+    } finally {
+      setLoadingPromotions(false);
+    }
+  };
+
+  // Handle notification icon tap for Firebase test access
+  const handleNotificationTap = () => {
+    setNotificationTapCount(prev => prev + 1);
+
+    // Reset after 3 seconds
+    setTimeout(() => {
+      setNotificationTapCount(0);
+    }, 3000);
+
+    // Check for 5 taps within 3 seconds to access Firebase test
+    if (notificationTapCount === 4) {
+      // 5th tap (0-indexed)
+      Alert.alert(
+        'Firebase Test Access',
+        'Do you want to access Firebase FCM test screen?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open Test',
+            onPress: () => navigation?.navigate('FirebaseTestScreen'),
+          },
+        ],
+      );
+      setNotificationTapCount(0);
+    } else {
+      navigation?.navigate('NotificationScreen');
+    }
+  };
+
+  const formatPrice = price => {
+    if (!price) return 'Rp. 0';
+    const numPrice = parseFloat(price);
+    return `Rp. ${numPrice.toLocaleString('id-ID')}`;
+  };
+
+  // Function to check if product is on promotion
+  const getProductPromotion = productId => {
+    return promotions.find(
+      promo =>
+        promo.productId && promo.productId.toString() === productId.toString(),
+    );
+  };
+
+  // Function to get price display with promotion
+  const getPriceDisplay = item => {
+    const promotion = getProductPromotion(item.id);
+
+    if (promotion) {
+      return {
+        hasPromotion: true,
+        originalPrice: formatPrice(item.harga),
+        discountedPrice: formatPrice(promotion.discountedPrice),
+        discount: promotion.discount,
+      };
+    }
+
+    return {
+      hasPromotion: false,
+      originalPrice: formatPrice(item.harga),
+      discountedPrice: null,
+      discount: null,
+    };
+  };
+
+  const getActionText = kategori => {
+    return kategori?.toLowerCase() === 'produk'
+      ? 'Beli Produk'
+      : 'Pesan Layanan';
+  };
+
+  // Map database items to display format
+  const mappedItems = items.map(item => ({
+    id: item.id.toString(),
+    title: item.nama,
+    subtitle:
+      item.deskripsi?.substring(0, 50) + '...' || 'Deskripsi tidak tersedia',
+    desc: item.deskripsi || 'Deskripsi tidak tersedia',
+    price: formatPrice(item.harga),
+    image:
+      item.gambarUrl || 'https://via.placeholder.com/300x200?text=No+Image',
+    rating: item.rating || 5,
+    type: item.kategori?.toLowerCase() || 'produk',
+    category: item.katalog?.toLowerCase() || 'satuan',
+    action: getActionText(item.kategori),
+    // Include original item data for ProductDetailScreen
+    ...item,
+  }));
+
+  // Combine database items with dummy data as fallback
+  const allProducts = mappedItems.length > 0 ? mappedItems : products;
+
+  // Filter products based on selected category
   const filteredProducts =
     selectedCategory === 'all'
-      ? products
-      : products.filter(p => selectedCategory === 'produk');
+      ? allProducts.slice(0, 6) // Show only first 6 items on home screen
+      : allProducts
+          .filter(p => {
+            if (selectedCategory === 'produk') {
+              return (
+                p.type === 'produk' || p.kategori?.toLowerCase() === 'produk'
+              );
+            } else if (selectedCategory === 'layanan') {
+              return (
+                p.type === 'layanan' || p.kategori?.toLowerCase() === 'layanan'
+              );
+            }
+            return true;
+          })
+          .slice(0, 6);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -124,7 +321,7 @@ export default function HomeScreen({ navigation }) {
           </View>
           <TouchableOpacity
             style={styles.iconNotif}
-            onPress={() => navigation?.navigate('NotificationScreen')}
+            onPress={handleNotificationTap}
           >
             <NotificationIcon />
           </TouchableOpacity>
@@ -149,21 +346,89 @@ export default function HomeScreen({ navigation }) {
           style={{ marginTop: 20 }}
           contentContainerStyle={{ paddingLeft: 18 }}
         >
-          <View style={styles.promoCard}>
-            <Image
-              source={require('./assets/promo-image.png')}
-              style={styles.promoImage}
-              resizeMode="cover"
-            />
-          </View>
-          <View style={styles.promoCard}>
-            <Image
-              source={require('./assets/promo-image.png')}
-              style={styles.promoImage}
-              resizeMode="cover"
-            />
-          </View>
-          {/* Bisa tambah promo lain */}
+          {loadingPromotions ? (
+            // Loading state
+            <View style={styles.promoCard}>
+              <View
+                style={[
+                  styles.promoImage,
+                  {
+                    backgroundColor: '#f0f0f0',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  },
+                ]}
+              >
+                <ActivityIndicator size="large" color="#1976D2" />
+              </View>
+            </View>
+          ) : promotions.length > 0 ? (
+            // Display promotions from database
+            promotions.map((promotion, index) => {
+              const imageUrl = promotion.imageUrl
+                ? `${getImageBaseURL()}${promotion.imageUrl}`
+                : null;
+
+              console.log('Rendering promotion image:', {
+                id: promotion.id,
+                rawImageUrl: promotion.imageUrl,
+                fullImageUrl: imageUrl,
+                baseURL: getImageBaseURL(),
+              });
+
+              return (
+                <View key={promotion.id || index} style={styles.promoCard}>
+                  {imageUrl ? (
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.promoImage}
+                      resizeMode="cover"
+                      onError={e => {
+                        console.log(
+                          'Promo image load error for URL:',
+                          imageUrl,
+                        );
+                        console.log('Error details:', e.nativeEvent.error);
+                      }}
+                      onLoad={() => {
+                        console.log(
+                          'Promo image loaded successfully:',
+                          imageUrl,
+                        );
+                      }}
+                      onLoadStart={() => {
+                        console.log('Promo image load started:', imageUrl);
+                      }}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.promoImage,
+                        {
+                          backgroundColor: '#f0f0f0',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: '#666', fontSize: 16 }}>
+                        No Image
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          ) : (
+            // Fallback when no promotions
+            <View style={styles.promoCard}>
+              <Image
+                source={require('./assets/promo-image.png')}
+                style={styles.promoImage}
+                resizeMode="cover"
+              />
+            </View>
+          )}
         </ScrollView>
 
         {/* Katalog */}
@@ -208,52 +473,108 @@ export default function HomeScreen({ navigation }) {
             marginTop: 10,
           }}
         >
-          {filteredProducts.map(item => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.productCard}
-              onPress={() =>
-                navigation.navigate('ProductDetailScreen', { product: item })
-              }
+          {loading ? (
+            <View
+              style={{
+                width: '100%',
+                alignItems: 'center',
+                paddingVertical: 20,
+              }}
             >
-              <Image source={{ uri: item.image }} style={styles.productImg} />
-              <View style={{ padding: 10 }}>
-                <Text style={styles.productTitle}>{item.title}</Text>
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginTop: 6,
-                  }}
-                >
-                  <Text style={styles.productPrice}>{item.price}</Text>
-                  <View style={{ flexDirection: 'row' }}>
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <View
-                        key={i}
-                        style={{
-                          marginRight: i < 5 ? 2 : 0,
-                        }}
-                      >
-                        <Image
-                          source={
-                            i <= item.rating
-                              ? require('./assets/Star-Yellow.png')
-                              : require('./assets/Star.png')
-                          }
+              <ActivityIndicator size="large" color="#1976D2" />
+              <Text style={{ marginTop: 10, color: '#666' }}>
+                Memuat produk...
+              </Text>
+            </View>
+          ) : filteredProducts.length === 0 ? (
+            <View
+              style={{
+                width: '100%',
+                alignItems: 'center',
+                paddingVertical: 20,
+              }}
+            >
+              <Text style={{ color: '#666' }}>Tidak ada produk tersedia</Text>
+            </View>
+          ) : (
+            filteredProducts.map(item => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.productCard}
+                onPress={() =>
+                  navigation.navigate('ProductDetailScreen', { product: item })
+                }
+              >
+                <Image source={{ uri: item.image }} style={styles.productImg} />
+                <View style={{ padding: 10 }}>
+                  <Text style={styles.productTitle}>{item.title}</Text>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginTop: 6,
+                    }}
+                  >
+                    {(() => {
+                      const priceInfo = getPriceDisplay(item);
+
+                      if (priceInfo.hasPromotion) {
+                        return (
+                          <View style={{ flexDirection: 'column' }}>
+                            <Text
+                              style={[
+                                styles.productPrice,
+                                styles.originalPrice,
+                              ]}
+                            >
+                              {priceInfo.originalPrice}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.productPrice,
+                                styles.discountedPrice,
+                              ]}
+                            >
+                              {priceInfo.discountedPrice}
+                            </Text>
+                          </View>
+                        );
+                      } else {
+                        return (
+                          <Text style={styles.productPrice}>
+                            {priceInfo.originalPrice}
+                          </Text>
+                        );
+                      }
+                    })()}
+                    <View style={{ flexDirection: 'row' }}>
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <View
+                          key={i}
                           style={{
-                            width: 10,
-                            height: 10,
+                            marginRight: i < 5 ? 2 : 0,
                           }}
-                        />
-                      </View>
-                    ))}
+                        >
+                          <Image
+                            source={
+                              i <= item.rating
+                                ? require('./assets/Star-Yellow.png')
+                                : require('./assets/Star.png')
+                            }
+                            style={{
+                              width: 10,
+                              height: 10,
+                            }}
+                          />
+                        </View>
+                      ))}
+                    </View>
                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -300,7 +621,7 @@ export default function HomeScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   headerContainer: {
-    paddingTop: 80,
+    paddingTop: 20,
     paddingHorizontal: 18,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -355,12 +676,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     overflow: 'hidden',
+    position: 'relative', // Ensure relative positioning for absolute children
   },
   promoImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
+
   catalogHeader: {
     marginTop: 30,
     marginBottom: 12,
@@ -412,6 +735,8 @@ const styles = StyleSheet.create({
     color: '#1976D2',
   },
   productCard: {
+    borderWidth: 0.5,
+    borderColor: '#E5E8EC',
     width: '47%',
     backgroundColor: '#F4F8FB',
     borderRadius: 18,
@@ -420,8 +745,8 @@ const styles = StyleSheet.create({
   },
   productImg: {
     width: '100%',
-    height: 140,
-    resizeMode: 'cover',
+    height: 100,
+    resizeMode: 'contain',
     backgroundColor: '#fff',
   },
   productTitle: {
@@ -435,6 +760,17 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.medium,
     fontSize: 10,
     color: '#000000',
+  },
+  originalPrice: {
+    textDecorationLine: 'line-through',
+    color: '#999999',
+    fontSize: 8,
+  },
+  discountedPrice: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 10,
+    color: '#E53E3E',
   },
   tabBar: {
     position: 'absolute',

@@ -8,6 +8,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
+import ApiService from '../services/api';
 
 const { width, height } = Dimensions.get('window');
 
@@ -17,48 +18,48 @@ const splashAssets = [
     source: require('./assets/splash-call.png'),
     position: { top: 0, left: 0 },
     size: { width: 200, height: 100 },
-    transform: { translateX: -60, translateY: 150, rotate: '45deg' },
+    transform: { translateX: -60, translateY: 50, rotate: '45deg' },
   },
   {
     id: 'orangeclip',
     source: require('./assets/splash-orangeclip.png'),
     position: { top: 150, right: 150 },
     size: { width: 174, height: 176 },
-    transform: { translateX: 80, translateY: -90, rotate: '69deg' },
+    transform: { translateX: 80, translateY: -160, rotate: '69deg' },
   },
   {
     id: 'blueclip',
     source: require('./assets/splash-blueclip.png'),
     position: { top: 150, right: 150 },
     size: { width: 86, height: 134 },
-    transform: { translateX: 175, translateY: 150, rotate: '40deg' },
+    transform: { translateX: 175, translateY: 20, rotate: '40deg' },
   },
   {
     id: 'paperstack',
     source: require('./assets/splash-paperstack.png'),
     position: { top: 15, left: 15 },
     size: { width: 210, height: 270 },
-    transform: { translateX: -20, translateY: 260, rotate: '2deg' },
+    transform: { translateX: -20, translateY: 150, rotate: '2deg' },
   },
   {
     id: 'pinkpaper',
     source: require('./assets/splash-pinkpaper.png'),
     position: { top: 150, right: 15 },
     size: { width: 98.99, height: 107.54 },
-    transform: { translateX: -10, translateY: 380, rotate: '-5deg' },
+    transform: { translateX: 5, translateY: 250, rotate: '-5deg' },
   },
   {
     id: 'paperclip',
     source: require('./assets/splash-paperclip.png'),
     position: { bottom: 190, left: -10 },
     size: { width: 73, height: 110 },
-    transform: { translateX: -15, translateY: 0, rotate: '-13deg' },
+    transform: { translateX: -15, translateY: 50, rotate: '-13deg' },
   },
   {
     id: 'pen',
     source: require('./assets/splash-pen.png'),
     position: { bottom: 110, right: 60 },
-    size: { width: 120, height: 180 },
+    size: { width: 100, height: 150 },
     transform: { translateX: -30, translateY: 30, rotate: '10deg' },
   },
   {
@@ -66,7 +67,7 @@ const splashAssets = [
     source: require('./assets/splash-crumple.png'),
     position: { bottom: 60, left: 30 },
     size: { width: 150, height: 130 },
-    transform: { translateX: 10, translateY: 30, rotate: '-3deg' },
+    transform: { translateX: 10, translateY: 70, rotate: '-3deg' },
   },
 ];
 
@@ -104,11 +105,29 @@ const getTransformStyle = transform => {
 
 export default function SplashScreen({ navigation }) {
   useEffect(() => {
-    // Simulasi splash selama 3 detik sebelum pindah ke onboarding
-    const timer = setTimeout(() => {
-      navigation.replace('Onboarding');
-    }, 5000);
-    return () => clearTimeout(timer);
+    const checkAuthAndNavigate = async () => {
+      try {
+        // Check if user is already logged in
+        const isLoggedIn = await ApiService.isLoggedIn();
+
+        // Wait for splash duration
+        setTimeout(() => {
+          if (isLoggedIn) {
+            navigation.replace('Home');
+          } else {
+            navigation.replace('Onboarding');
+          }
+        }, 3000); // Reduced to 3 seconds
+      } catch (error) {
+        console.error('Auth check error:', error);
+        // If error, go to onboarding
+        setTimeout(() => {
+          navigation.replace('Onboarding');
+        }, 3000);
+      }
+    };
+
+    checkAuthAndNavigate();
   }, [navigation]);
 
   return (
@@ -154,9 +173,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   logoContainer: {
-    marginTop: 45,
     position: 'absolute',
-    top: height * 0.43,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -168,7 +185,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#0070D8',
     paddingBottom: 16,
-    width: 100,
+    width: 120,
     height: 40,
   },
   splashText2: {

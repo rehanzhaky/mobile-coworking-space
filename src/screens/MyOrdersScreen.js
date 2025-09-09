@@ -114,9 +114,10 @@ export default function MyOrdersScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   header: {
+
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 73,
+    marginTop:10,
     marginBottom: 31,
     paddingHorizontal: 18,
     justifyContent: 'center',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,20 +9,56 @@ import {
   ScrollView,
 } from 'react-native';
 import { FontWeight, FontFamily } from '../styles/typography';
+import ApiService from '../services/api';
 
 export default function ProfileScreen({ navigation }) {
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const user = await ApiService.getCurrentUser();
+      setUserData(user);
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await ApiService.logoutUser();
+      navigation?.replace('Login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 90 }}>
         <Text style={styles.header}>Profil</Text>
         <View style={styles.profileSection}>
           <Image
-            source={{ uri: 'https://randomuser.me/api/portraits/men/32.jpg' }}
+            source={{
+              uri:
+                userData?.profilePhoto ||
+                'https://randomuser.me/api/portraits/men/32.jpg',
+            }}
             style={styles.avatar}
           />
           <View>
-            <Text style={styles.name}>Maxwell</Text>
-            <Text style={styles.community}>Komunitas Waria</Text>
+            <Text style={styles.name}>
+              {userData?.username || 'Guteest User'}
+            </Text>
+            <Text style={styles.community}>
+              {userData?.community || userData?.email || 'Belum login'}
+            </Text>
           </View>
           <TouchableOpacity
             style={styles.editBtn}
@@ -56,10 +92,7 @@ export default function ProfileScreen({ navigation }) {
           />
         </View>
 
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={() => navigation?.navigate('Login')}
-        >
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutBtnText}>Keluar</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -130,7 +163,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#0070D8',
     marginLeft: 20,
-    marginTop: 80,
+    marginTop: 10,
     marginBottom: 32,
   },
   profileSection: {

@@ -5,13 +5,17 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Image,
-  ImageBackground,
   SafeAreaView,
+  ImageBackground,
+  Image,
+  Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
+import { LinearGradient } from 'react-native-linear-gradient';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
+import ApiService from '../services/api';
+import FirebaseService from '../config/firebase';
 
 // Custom icons for login form - using fallback to existing icon for now
 const UserIcon = () => {
@@ -53,9 +57,100 @@ const LockIcon = () => {
 };
 
 export default function LoginScreen({ navigation }) {
-  const [username, setUsername] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [securePass, setSecurePass] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const validateForm = () => {
+    if (!usernameOrEmail.trim()) {
+      Alert.alert('Error', 'Username atau email harus diisi');
+      return false;
+    }
+
+    if (!password.trim()) {
+      Alert.alert('Error', 'Password harus diisi');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleLogin = async () => {
+    console.log('handleLogin called');
+    if (!validateForm()) {
+      console.log('Form validation failed');
+      return;
+    }
+
+    console.log('Starting login process...');
+    setLoading(true);
+
+    try {
+      // Test connection first
+      console.log('Testing connection to backend...');
+      const connectionTest = await ApiService.testConnection();
+      console.log('Connection test result:', connectionTest);
+
+      if (!connectionTest.success) {
+        Alert.alert(
+          'Connection Error',
+          `Cannot connect to server: ${connectionTest.error}`,
+        );
+        setLoading(false);
+        return;
+      }
+
+      const loginData = {
+        email: usernameOrEmail.trim(), // backend masih menggunakan parameter 'email' untuk compatibility
+        password: password,
+      };
+      console.log('Calling ApiService.loginUser with:', loginData.email);
+
+      const result = await ApiService.loginUser(loginData);
+      console.log('Login result:', result);
+
+      if (result.success) {
+        console.log('Login successful');
+
+        // Register Firebase token setelah login berhasil
+        try {
+          console.log('🔥 Registering Firebase token after login...');
+          await FirebaseService.registerToken();
+          console.log('✅ Firebase token registered successfully after login');
+        } catch (firebaseError) {
+          console.error(
+            '❌ Firebase token registration failed after login:',
+            firebaseError,
+          );
+          // Jangan gagalkan login jika Firebase error
+        }
+
+        console.log('Navigation object:', navigation);
+        console.log('Attempting to navigate to Home screen...');
+
+        // Langsung redirect ke Home tanpa alert
+        if (navigation) {
+          navigation.replace('Home');
+          console.log('Navigation.replace("Home") called');
+        } else {
+          console.error('Navigation object is null/undefined');
+        }
+
+        // Optional: Tampilkan toast atau alert singkat jika diperlukan
+        // Alert.alert('Berhasil!', 'Login berhasil!');
+      } else {
+        console.log('Login failed:', result.message);
+        Alert.alert('Error', result.message);
+      }
+    } catch (error) {
+      console.error('Login catch error:', error);
+      Alert.alert('Error', 'Terjadi kesalahan. Silakan coba lagi.');
+    } finally {
+      console.log('Login process completed');
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -78,15 +173,15 @@ export default function LoginScreen({ navigation }) {
               </Text>
 
               <View style={styles.formBox}>
-                {/* Username */}
+                {/* Username/Email */}
                 <Text style={styles.label}>Username</Text>
                 <View style={styles.inputWrapper}>
                   <UserIcon />
                   <TextInput
                     style={styles.input}
                     placeholder="Masukkan username/email"
-                    value={username}
-                    onChangeText={setUsername}
+                    value={usernameOrEmail}
+                    onChangeText={setUsernameOrEmail}
                     placeholderTextColor="#BDBDBD"
                     autoCapitalize="none"
                   />
@@ -112,10 +207,15 @@ export default function LoginScreen({ navigation }) {
 
                 {/* Button */}
                 <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => navigation?.replace('Home')}
+                  style={[styles.button, loading && styles.disabledButton]}
+                  onPress={handleLogin}
+                  disabled={loading}
                 >
-                  <Text style={styles.buttonText}>Masuk</Text>
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Masuk</Text>
+                  )}
                 </TouchableOpacity>
 
                 {/* Don't have an account */}
@@ -164,7 +264,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: 40,
     paddingHorizontal: 0,
   },
   header1: {
@@ -172,7 +271,7 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     fontSize: 20,
     color: '#0070D8',
-    marginBottom: 78,
+    marginBottom: 50,
     marginTop: 20,
     marginLeft: -165,
   },
@@ -188,7 +287,7 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
     fontSize: 16,
     color: '#646464',
-    marginBottom: 30,
+    marginBottom: 20,
     textAlign: 'center',
   },
   formBox: {
@@ -201,7 +300,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.09,
     shadowRadius: 10,
     elevation: 3,
-    marginTop: 6,
     marginBottom: 16,
   },
   label: {
@@ -221,7 +319,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 2,
     backgroundColor: '#fff',
-    height: 54,
+    height: 45,
   },
   input: {
     fontFamily: FontFamily.outfit_regular,
@@ -239,6 +337,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
   buttonText: {
     ...TextStyles.button,
@@ -275,7 +376,7 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     borderRadius: 12,
     paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 15,
     justifyContent: 'center',
     marginTop: 4,
   },

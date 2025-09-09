@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,28 +8,178 @@ import {
   StyleSheet,
   SafeAreaView,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { FontWeight, FontFamily } from '../styles/typography';
+import ApiService from '../services/api';
+import { launchImageLibrary } from 'react-native-image-picker';
 
 // Replace with your default profile image
 const DEFAULT_PROFILE = require('./assets/edit-profile.png');
 const CAMERA_ICON = require('./assets/camera-icon.png'); // Replace with your camera icon
 
 export default function EditProfileScreen({ navigation }) {
-  // Example initial data, replace with your state management
   const [photo, setPhoto] = useState(DEFAULT_PROFILE);
-  const [firstName, setFirstName] = useState('Maxwell');
-  const [lastName, setLastName] = useState('Lawson');
-  const [username, setUsername] = useState('Maxwell');
-  const [community, setCommunity] = useState('Komunitas Waria');
-  const [email, setEmail] = useState('Maxwell@sembangin.com');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [username, setUsername] = useState('');
+  const [community, setCommunity] = useState('');
+  const [email, setEmail] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [userData, setUserData] = useState(null);
 
-  const handlePhotoChange = () => {
-    // Open image picker here
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      console.log('Loading user data...');
+
+      // Check if user is logged in first
+      const isLoggedIn = await ApiService.isLoggedIn();
+      console.log('Is logged in:', isLoggedIn);
+
+      if (!isLoggedIn) {
+        console.log('User not logged in, redirecting to login');
+        Alert.alert(
+          'Error',
+          'Anda belum login. Silakan login terlebih dahulu.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation?.replace('Login'),
+            },
+          ],
+        );
+        return;
+      }
+
+      const user = await ApiService.getCurrentUser();
+      console.log('User data loaded:', user);
+
+      if (user) {
+        setUserData(user);
+        setFirstName(user.firstName || '');
+        setLastName(user.lastName || '');
+        setUsername(user.username || '');
+        setCommunity(user.community || '');
+        setEmail(user.email || '');
+        setProfilePhoto(user.profilePhoto || '');
+
+        // Update photo display
+        if (user.profilePhoto) {
+          setPhoto({ uri: user.profilePhoto });
+        }
+
+        console.log('Form data set:', {
+          firstName: user.firstName || '',
+          lastName: user.lastName || '',
+          username: user.username || '',
+          community: user.community || '',
+          email: user.email || '',
+          profilePhoto: user.profilePhoto || '',
+        });
+      } else {
+        console.log(
+          'No user data found, but user is logged in - this is unexpected',
+        );
+        Alert.alert(
+          'Error',
+          'User data tidak ditemukan. Silakan login ulang.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation?.replace('Login'),
+            },
+          ],
+        );
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      Alert.alert('Error', 'Gagal memuat data profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSave = () => {
-    // Save profile logic here
+  const handlePhotoChange = () => {
+    const options = {
+      mediaType: 'photo',
+      includeBase64: true,
+      maxHeight: 2000,
+      maxWidth: 2000,
+      quality: 0.8,
+    };
+
+    Alert.alert('Pilih Foto', 'Pilih sumber foto profile', [
+      {
+        text: 'Galeri',
+        onPress: () => {
+          launchImageLibrary(options, response => {
+            if (response.didCancel || response.error) {
+              console.log('Image picker cancelled or error');
+              return;
+            }
+
+            if (response.assets && response.assets[0]) {
+              const asset = response.assets[0];
+              const imageUri = `data:${asset.type};base64,${asset.base64}`;
+
+              console.log('Image selected:', asset.fileName);
+              setPhoto({ uri: asset.uri });
+              setProfilePhoto(imageUri);
+            }
+          });
+        },
+      },
+      {
+        text: 'Batal',
+        style: 'cancel',
+      },
+    ]);
+  };
+
+  const handleSave = async () => {
+    if (!userData?.id) {
+      Alert.alert('Error', 'User data tidak ditemukan');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const profileData = {
+        username: username.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim().toLowerCase(),
+        community: community.trim(),
+        profilePhoto: profilePhoto,
+      };
+
+      console.log('Saving profile data:', profileData);
+
+      const result = await ApiService.updateProfile(userData.id, profileData);
+
+      if (result.success) {
+        Alert.alert('Berhasil!', 'Profile berhasil diupdate', [
+          {
+            text: 'OK',
+            onPress: () => navigation?.goBack(),
+          },
+        ]);
+      } else {
+        Alert.alert('Error', result.message);
+      }
+    } catch (error) {
+      console.error('Save profile error:', error);
+      Alert.alert('Error', 'Gagal menyimpan profile');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -58,58 +208,77 @@ export default function EditProfileScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* Form */}
-        <View style={{ paddingHorizontal: 24, marginTop: 12 }}>
-          <Text style={styles.label}>Nama Depan</Text>
-          <TextInput
-            style={styles.input}
-            value={firstName}
-            onChangeText={setFirstName}
-            placeholder="Nama Depan"
-            placeholderTextColor="#bbb"
-          />
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007bff" />
+            <Text style={styles.loadingText}>Memuat data profile...</Text>
+          </View>
+        ) : (
+          <View style={{ paddingHorizontal: 24, marginTop: 12 }}>
+            <Text style={styles.label}>Nama Depan</Text>
+            <TextInput
+              style={styles.input}
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Nama Depan"
+              placeholderTextColor="#bbb"
+              editable={!saving}
+            />
 
-          <Text style={styles.label}>Nama Belakang</Text>
-          <TextInput
-            style={styles.input}
-            value={lastName}
-            onChangeText={setLastName}
-            placeholder="Nama Belakang"
-            placeholderTextColor="#bbb"
-          />
+            <Text style={styles.label}>Nama Belakang</Text>
+            <TextInput
+              style={styles.input}
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Nama Belakang"
+              placeholderTextColor="#bbb"
+              editable={!saving}
+            />
 
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Username"
-            placeholderTextColor="#bbb"
-          />
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              placeholder="Username"
+              placeholderTextColor="#bbb"
+              editable={!saving}
+            />
 
-          <Text style={styles.label}>Komunitas</Text>
-          <TextInput
-            style={styles.input}
-            value={community}
-            onChangeText={setCommunity}
-            placeholder="Komunitas"
-            placeholderTextColor="#bbb"
-          />
+            <Text style={styles.label}>Komunitas</Text>
+            <TextInput
+              style={styles.input}
+              value={community}
+              onChangeText={setCommunity}
+              placeholder="Komunitas"
+              placeholderTextColor="#bbb"
+              editable={!saving}
+            />
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="Email"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            placeholderTextColor="#bbb"
-          />
-
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-            <Text style={styles.saveBtnText}>Simpan</Text>
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor="#bbb"
+              editable={!saving}
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && styles.disabledBtn]}
+              onPress={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>Simpan</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -119,7 +288,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 73,
+    marginTop: 10,
     marginBottom: 2,
     paddingHorizontal: 18,
   },
@@ -147,7 +316,7 @@ const styles = StyleSheet.create({
   },
   cameraIconWrapper: {
     position: 'absolute',
-    right: 156,
+    right: 130,
     bottom: 33,
     width: 26,
     height: 26,
@@ -189,7 +358,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 0,
     marginTop: 0,
-    marginBottom: 9,
+    marginBottom: 0,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  disabledInput: {
+    backgroundColor: '#f5f5f5',
+    color: '#999',
   },
   saveBtn: {
     backgroundColor: '#0070D8',
@@ -200,6 +384,9 @@ const styles = StyleSheet.create({
     marginBottom: 38,
     width: '70%',
     alignSelf: 'center',
+  },
+  disabledBtn: {
+    backgroundColor: '#ccc',
   },
   saveBtnText: {
     fontFamily: FontFamily.outfit_medium,

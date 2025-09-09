@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 80,
+    marginTop: 10,
     marginBottom: 31,
     paddingHorizontal: 18,
     justifyContent: 'center',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,12 @@ import {
   Image,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { FontWeight, FontFamily } from '../styles/typography';
+import ApiService from '../services/api';
 
 // Dummy icons, replace with react-native-vector-icons or SVG
 const ProductIcon = () => (
@@ -32,138 +36,182 @@ const SearchIcon = () => (
   />
 );
 
-const products = [
-  {
-    id: '1',
-    title: 'Aplikasi Pelaporan Staf',
-    subtitle: 'Untuk melaporkan pekerjaan harian staf',
-    desc: 'Aplikasi ini cocok untuk kamu yang mempunyai staf paruh waktu atau hanya pelaksana yang ditugaskan beberapa hari.',
-    price: 'Rp.700.000',
-    image: require('./assets/pelaporan-staff.png'),
-    rating: 4,
-    type: 'produk',
-    category: 'satuan',
-    action: 'Beli Produk',
-  },
-  {
-    id: '2',
-    title: 'Aplikasi Data Entry Relawan',
-    subtitle: 'Untuk menginput data relawan atau anggota\n komunitas anda',
-    desc: 'Aplikasi ini cocok untuk mempermudah lembaga anda dalam mendata relawan ataupun anggota anda yang tersebar di beberapa daerah di Indonesia.',
-    price: 'Rp.1.000.000',
-    image: require('./assets/data-entry.png'),
-    rating: 5,
-    type: 'produk',
-    category: 'satuan',
-    action: 'Beli Produk',
-  },
-  {
-    id: '3',
-    title: 'Aplikasi Absensi Staff',
-    subtitle: 'Untuk absensi staf ataupun pelaksana\n yang ada di lembaga anda',
-    desc: 'Aplikasi ini cocok untuk mempermudah lembaga anda dalam melakukan absensi, dapat mendeteksi lokasi, dan juga mempunyai fitur untuk memberikan pernyataan izin',
-    price: 'Rp.1.500.000',
-    image: require('./assets/absensi-staff.png'),
-    rating: 4,
-    type: 'produk',
-    category: 'satuan',
-    action: 'Beli Produk',
-  },
-  {
-    id: '4',
-    title: 'Aplikasi Pelaporan Bencana',
-    subtitle: 'Untuk melaporkan situasi dan kejadian bencana',
-    desc: 'Aplikasi ini cocok untuk mempermudah para Tim Reaksi Cepat (TRC) bencana yang ada di lembaga anda untuk melaporkan langsung keadaan dikejadian bencana.',
-    price: 'Rp.1.500.000',
-    image: require('./assets/pelaporan-bencana.png'),
-    rating: 4,
-    type: 'produk',
-    category: 'satuan',
-    action: 'Beli Produk',
-  },
-  {
-    id: '5',
-    title: 'Website LMS',
-    subtitle: 'Untuk akses pembelajaran para relawan\n atau komunitas lembaga',
-    desc: 'Aplikasi ini cocok untuk mempermudah para Tim Reaksi Cepat (TRC) bencana yang ada di lembaga anda untuk melaporkan langsung keadaan dikejadian bencana.',
-    price: 'Rp.1.500.000',
-    image: require('./assets/website-lms.png'),
-    rating: 5,
-    type: 'produk',
-    category: 'satuan',
-    action: 'Beli Produk',
-  },
-  {
-    id: '6',
-    title: 'Website Profile',
-    subtitle: 'Portofolio untuk memperkenalkan\n lembaga anda secara digital',
-    desc: 'Website ini cocok untuk memperkenalkan kepada publik terkait lembaga anda, mirip dengan portofolio hanya dikemas secara digital melalui web',
-    price: 'Rp.1.800.000',
-    image: require('./assets/website-profile.png'),
-    rating: 5,
-    type: 'produk',
-    category: 'satuan',
-    action: 'Beli Produk',
-  },
-  {
-    id: '7',
-    title: 'Layanan Design Nametag (ID Card)',
-    subtitle: 'Untuk tanda pengenal para relawan atau staf',
-    desc: 'Layanan ini dapat membantu anda untuk lebih mudah membuat desain kartu tanda pengenal (ID Card).',
-    price: 'Rp.1.800.000',
-    image: require('./assets/id-card.png'),
-    rating: 5,
-    type: 'layanan',
-    category: 'satuan',
-    action: 'Pesan Layanan',
-  },
-  {
-    id: '8',
-    title: 'Layanan Design Banner',
-    subtitle: 'Untuk promosi melalui banner atau spanduk',
-    desc: 'Layanan desain ini cocok untuk lembaga anda dalam mempromosikan produk, program, ataupun lembaga melalui media banner.',
-    price: 'Rp.1.800.000',
-    image: require('./assets/design-banner.png'),
-    rating: 4,
-    type: 'layanan',
-    category: 'satuan',
-    action: 'Pesan Layanan',
-  },
-  {
-    id: '9',
-    title: 'Layanan Design Poster',
-    subtitle: 'Untuk promosi atau memperkenalkan\nkegiatan yang berlangsung',
-    desc: 'Layanan desain ini cocok untuk lembaga anda dalam mempromosikan ataupun memperkenalkan kegiatan yang akan diselenggarakan melalui poster.',
-    price: 'Rp.1.000.000',
-    image: require('./assets/design-poster.png'),
-    rating: 4,
-    type: 'layanan',
-    category: 'satuan',
-    action: 'Pesan Layanan',
-  },
-  {
-    id: '10',
-    title: 'Layanan Sewa Zoom',
-    subtitle:
-      'Untuk menjadi ruang kerja secara virtual\ndengan para relawan atau staf',
-    desc: 'Layanan sewa ini dapat disewa selama 8 jam, sehingga menjadi ruang kerja ataupun komunikasi jarak jauh yang tak terbatas dengan para relawan atuapun staf melalui zoom pro',
-    price: 'Rp.1.000.000',
-    image: require('./assets/layanan-zoom.png'),
-    rating: 5,
-    type: 'layanan',
-    category: 'satuan',
-    action: 'Pesan Layanan',
-  },
-];
-
 export default function CatalogScreen({ navigation }) {
   const [search, setSearch] = useState('');
-  const [activeType, setActiveType] = useState('produk');
-  const [activeCategory, setActiveCategory] = useState('satuan');
+  const [activeType, setActiveType] = useState('Produk');
+  const [activeCategory, setActiveCategory] = useState('Satuan');
   const [expanded, setExpanded] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [promotions, setPromotions] = useState([]);
+  const [loadingPromotions, setLoadingPromotions] = useState(true);
 
-  const filteredProducts = products.filter(
-    p => p.type === activeType && p.category === activeCategory,
+  useEffect(() => {
+    fetchItems();
+    fetchPromotions();
+  }, []);
+
+  // Refresh promotions when screen is focused (untuk update real-time dari admin)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('CatalogScreen focused - refreshing promotions');
+      fetchPromotions();
+    }, []),
+  );
+
+  const fetchItems = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching items from API...');
+      const result = await ApiService.getItems();
+      console.log('API result:', result);
+
+      if (result.success) {
+        console.log('Items loaded successfully:', result.data.length);
+        console.log('Sample item:', result.data[0]);
+        setItems(result.data);
+      } else {
+        console.error('API returned error:', result.message);
+        Alert.alert('Error', result.message || 'Gagal memuat data produk');
+      }
+    } catch (error) {
+      console.error('Error fetching items:', error);
+      Alert.alert('Error', 'Gagal memuat data produk: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPromotions = async () => {
+    try {
+      setLoadingPromotions(true);
+      const result = await ApiService.getPromotions();
+      if (result.success) {
+        console.log('CatalogScreen: Promotions loaded:', result.data.length);
+        setPromotions(result.data);
+      } else {
+        console.error('CatalogScreen: Failed to load promotions');
+      }
+    } catch (error) {
+      console.error('CatalogScreen: Error fetching promotions:', error);
+    } finally {
+      setLoadingPromotions(false);
+    }
+  };
+
+  const formatPrice = price => {
+    if (!price) return 'Rp. 0';
+    const numPrice = parseFloat(price);
+    return `Rp. ${numPrice.toLocaleString('id-ID')}`;
+  };
+
+  // Function to check if product is on promotion
+  const getProductPromotion = productId => {
+    return promotions.find(
+      promo =>
+        promo.productId && promo.productId.toString() === productId.toString(),
+    );
+  };
+
+  // Helper function to format JSON data for display (simple text only)
+  const formatDisplayText = data => {
+    if (!data) return '';
+
+    try {
+      // If it's a string, try to parse as JSON first
+      if (typeof data === 'string') {
+        try {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed)) {
+            // For catalog, just show first few items as comma-separated
+            return (
+              parsed.slice(0, 3).join(', ') + (parsed.length > 3 ? '...' : '')
+            );
+          }
+          return data;
+        } catch {
+          return data;
+        }
+      }
+
+      // If it's already an array, format as comma-separated
+      if (Array.isArray(data)) {
+        return data.slice(0, 3).join(', ') + (data.length > 3 ? '...' : '');
+      }
+
+      return data.toString();
+    } catch (error) {
+      console.error('Error formatting display text:', error);
+      return data || '';
+    }
+  };
+
+  // Function to get price display with promotion
+  const getPriceDisplay = item => {
+    const promotion = getProductPromotion(item.id);
+
+    if (promotion) {
+      return {
+        hasPromotion: true,
+        originalPrice: formatPrice(item.harga),
+        discountedPrice: formatPrice(promotion.discountedPrice),
+        discount: promotion.discount,
+      };
+    }
+
+    return {
+      hasPromotion: false,
+      originalPrice: formatPrice(item.harga),
+      discountedPrice: null,
+      discount: null,
+    };
+  };
+
+  const formatFeatures = fitur => {
+    if (!fitur) return [];
+    try {
+      return typeof fitur === 'string' ? JSON.parse(fitur) : fitur;
+    } catch {
+      return [];
+    }
+  };
+
+  const getActionText = kategori => {
+    return kategori?.toLowerCase() === 'produk'
+      ? 'Beli Produk'
+      : 'Pesan Layanan';
+  };
+
+  const filteredProducts = items.filter(item => {
+    // Handle type filter - include "Pricing" as "Produk"
+    const itemType = item.kategori?.toLowerCase();
+    const matchesType =
+      itemType === activeType.toLowerCase() ||
+      (activeType.toLowerCase() === 'produk' && itemType === 'pricing');
+
+    // Handle category filter - treat null/undefined as "Satuan"
+    const itemCategory = item.katalog?.toLowerCase() || 'satuan';
+    const matchesCategory = itemCategory === activeCategory.toLowerCase();
+
+    // Handle search
+    const matchesSearch =
+      search === '' ||
+      item.nama?.toLowerCase().includes(search.toLowerCase()) ||
+      item.deskripsi?.toLowerCase().includes(search.toLowerCase());
+
+    console.log(
+      `Item: ${
+        item.nama
+      }, Type: ${itemType}, Category: ${itemCategory}, Matches: ${
+        matchesType && matchesCategory && matchesSearch
+      }`,
+    );
+
+    return matchesType && matchesCategory && matchesSearch;
+  });
+
+  console.log(
+    `Total items: ${items.length}, Filtered: ${filteredProducts.length}, Type: ${activeType}, Category: ${activeCategory}`,
   );
 
   return (
@@ -189,9 +237,9 @@ export default function CatalogScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.switchCard,
-              activeType === 'produk' && styles.switchCardActive,
+              activeType === 'Produk' && styles.switchCardActive,
             ]}
-            onPress={() => setActiveType('produk')}
+            onPress={() => setActiveType('Produk')}
           >
             <View
               style={{
@@ -204,7 +252,7 @@ export default function CatalogScreen({ navigation }) {
               <Text
                 style={[
                   styles.switchTitle,
-                  activeType === 'produk' && styles.switchTitleActive,
+                  activeType === 'Produk' && styles.switchTitleActive,
                 ]}
               >
                 Produk
@@ -213,7 +261,7 @@ export default function CatalogScreen({ navigation }) {
             <Text
               style={[
                 styles.switchDesc,
-                activeType === 'produk' && styles.switchDescActive,
+                activeType === 'Produk' && styles.switchDescActive,
               ]}
             >
               Aplikasi dan Website untuk komunitas
@@ -221,7 +269,7 @@ export default function CatalogScreen({ navigation }) {
             <Text
               style={[
                 styles.switchLink,
-                activeType === 'produk' && styles.switchLinkActive,
+                activeType === 'Produk' && styles.switchLinkActive,
               ]}
             >
               Lihat produk
@@ -231,9 +279,9 @@ export default function CatalogScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.switchCard,
-              activeType === 'layanan' && styles.switchCardActive,
+              activeType === 'Layanan' && styles.switchCardActive,
             ]}
-            onPress={() => setActiveType('layanan')}
+            onPress={() => setActiveType('Layanan')}
           >
             <View
               style={{
@@ -246,7 +294,7 @@ export default function CatalogScreen({ navigation }) {
               <Text
                 style={[
                   styles.switchTitle,
-                  activeType === 'layanan' && styles.switchTitleActive,
+                  activeType === 'Layanan' && styles.switchTitleActive,
                 ]}
               >
                 Layanan
@@ -255,7 +303,7 @@ export default function CatalogScreen({ navigation }) {
             <Text
               style={[
                 styles.switchDesc,
-                activeType === 'layanan' && styles.switchDescActive,
+                activeType === 'Layanan' && styles.switchDescActive,
               ]}
             >
               Jasa untuk membantu komunitas
@@ -263,7 +311,7 @@ export default function CatalogScreen({ navigation }) {
             <Text
               style={[
                 styles.switchLink,
-                activeType === 'layanan' && styles.switchLinkActive,
+                activeType === 'Layanan' && styles.switchLinkActive,
               ]}
             >
               Lihat layanan
@@ -277,14 +325,14 @@ export default function CatalogScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.categoryBtn,
-              activeCategory === 'satuan' && styles.categoryBtnActive,
+              activeCategory === 'Satuan' && styles.categoryBtnActive,
             ]}
-            onPress={() => setActiveCategory('satuan')}
+            onPress={() => setActiveCategory('Satuan')}
           >
             <Text
               style={[
                 styles.categoryBtnText,
-                activeCategory === 'satuan' && styles.categoryBtnTextActive,
+                activeCategory === 'Satuan' && styles.categoryBtnTextActive,
               ]}
             >
               Satuan
@@ -293,14 +341,14 @@ export default function CatalogScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.categoryBtn,
-              activeCategory === 'paket' && styles.categoryBtnActive,
+              activeCategory === 'Paket' && styles.categoryBtnActive,
             ]}
-            onPress={() => setActiveCategory('paket')}
+            onPress={() => setActiveCategory('Paket')}
           >
             <Text
               style={[
                 styles.categoryBtnText,
-                activeCategory === 'paket' && styles.categoryBtnTextActive,
+                activeCategory === 'Paket' && styles.categoryBtnTextActive,
               ]}
             >
               Paket
@@ -309,112 +357,226 @@ export default function CatalogScreen({ navigation }) {
         </View>
 
         {/* Products List */}
-        {filteredProducts.map((item, idx) => (
-          <View key={item.id} style={styles.productCard}>
-            <View style={styles.productImageWrapper}>
-              <Image source={item.image} style={styles.productImg} />
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() =>
-                  navigation.navigate('ProductDetailScreen', { product: item })
-                }
-              >
-                <Text style={styles.actionBtnText}>{item.action}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ padding: 16 }}>
-              {/* Conditional Product Details */}
-              {expanded === item.id && (
-                <>
-                  {/* Product Title dan Rating */}
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 6,
-                    }}
-                  >
-                    <Text style={styles.productTitle}>{item.title}</Text>
-                    <View style={{ flexDirection: 'row' }}>
-                      {[1, 2, 3, 4, 5].map(i => (
-                        <View
-                          key={i}
-                          style={{
-                            marginRight: i < 5 ? 2 : 0,
-                          }}
-                        >
-                          <Image
-                            source={
-                              i <= item.rating
-                                ? require('./assets/Star-Yellow.png')
-                                : require('./assets/Star.png')
-                            }
-                            style={{
-                              width: 11.52,
-                              height: 11.52,
-                            }}
-                          />
-                        </View>
-                      ))}
-                    </View>
-                  </View>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#1976D2" />
+            <Text style={styles.loadingText}>Memuat produk...</Text>
+          </View>
+        ) : filteredProducts.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              Tidak ada {activeType.toLowerCase()} dalam kategori{' '}
+              {activeCategory.toLowerCase()}
+            </Text>
+          </View>
+        ) : (
+          filteredProducts.map((item, idx) => {
+            console.log('Rendering item:', {
+              id: item.id,
+              nama: item.nama,
+              harga: item.harga,
+              deskripsi: item.deskripsi?.substring(0, 30),
+              gambarUrl: item.gambarUrl,
+            });
 
-                  {/* Product Subtitle dan Price */}
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 10,
-                    }}
-                  >
-                    <Text style={styles.productSubtitle}>{item.subtitle}</Text>
-                    <Text style={styles.productPrice}>{item.price}</Text>
-                  </View>
-
-                  <View
-                    style={{
-                      height: 1,
-                      backgroundColor: '#ddd',
-                      marginVertical: 10,
-                    }}
-                  />
-
-                  {/* Product Description */}
-                  <View style={{ marginBottom: 10 }}>
-                    <Text style={styles.productDesc}>{item.desc}</Text>
-                  </View>
-                </>
-              )}
-
-              <TouchableOpacity
-                style={styles.expandBtn}
-                onPress={() =>
-                  setExpanded(expanded === item.id ? null : item.id)
-                }
-              >
-                <View style={{ alignItems: 'center' }}>
-                  {expanded !== item.id && (
-                    <Text style={styles.expandText}>lihat selengkapnya</Text>
-                  )}
+            return (
+              <View key={item.id} style={styles.productCard}>
+                <View style={styles.productImageWrapper}>
                   <Image
                     source={
-                      expanded === item.id
-                        ? require('./assets/arrow-up.png')
-                        : require('./assets/arrow-down.png')
+                      item.gambarUrl
+                        ? { uri: item.gambarUrl }
+                        : {
+                            uri: 'https://via.placeholder.com/300x120?text=No+Image',
+                          }
                     }
-                    style={{
-                      width: 18,
-                      height: 18,
-                      marginTop: expanded === item.id ? 0 : 4,
-                    }}
+                    style={styles.productImg}
+                    onError={() =>
+                      console.log('Image load error for:', item.nama)
+                    }
                   />
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() =>
+                      navigation.navigate('ProductDetailScreen', {
+                        product: item,
+                      })
+                    }
+                  >
+                    <Text style={styles.actionBtnText}>
+                      {getActionText(item.kategori)}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
+                <View style={{ padding: 16 }}>
+                  {/* Conditional Product Details */}
+                  {expanded === item.id && (
+                    <>
+                      {/* Product Title dan Rating */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: 6,
+                        }}
+                      >
+                        <Text style={styles.productTitle}>{item.nama}</Text>
+                        <View style={{ flexDirection: 'row' }}>
+                          {[1, 2, 3, 4, 5].map(i => (
+                            <View
+                              key={i}
+                              style={{
+                                marginRight: i < 5 ? 2 : 0,
+                              }}
+                            >
+                              <Image
+                                source={
+                                  i <= (item.rating || 5)
+                                    ? require('./assets/Star-Yellow.png')
+                                    : require('./assets/Star.png')
+                                }
+                                style={{
+                                  width: 11.52,
+                                  height: 11.52,
+                                }}
+                              />
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+
+                      {/* Product Subtitle dan Price */}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          marginBottom: 10,
+                        }}
+                      >
+                        {/* Deskripsi dengan word wrap */}
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                          <Text
+                            style={[
+                              styles.productSubtitle,
+                              {
+                                lineHeight: 16,
+                                flexWrap: 'wrap',
+                              },
+                            ]}
+                            numberOfLines={2}
+                            ellipsizeMode="tail"
+                          >
+                            {formatDisplayText(item.deskripsi) ||
+                              'Tidak ada deskripsi'}
+                          </Text>
+                        </View>
+
+                        {/* Price container */}
+                        <View
+                          style={{
+                            alignItems: 'flex-end',
+                            minWidth: 80,
+                          }}
+                        >
+                          {(() => {
+                            const priceInfo = getPriceDisplay(item);
+
+                            if (priceInfo.hasPromotion) {
+                              return (
+                                <View
+                                  style={{
+                                    flexDirection: 'column',
+                                    alignItems: 'flex-end',
+                                  }}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.productPrice,
+                                      styles.originalPrice,
+                                      { marginLeft: 0 },
+                                    ]}
+                                  >
+                                    {priceInfo.originalPrice}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.productPrice,
+                                      styles.discountedPrice,
+                                      { marginLeft: 0 },
+                                    ]}
+                                  >
+                                    {priceInfo.discountedPrice}
+                                  </Text>
+                                </View>
+                              );
+                            } else {
+                              return (
+                                <Text
+                                  style={[
+                                    styles.productPrice,
+                                    { marginLeft: 0 },
+                                  ]}
+                                >
+                                  {priceInfo.originalPrice}
+                                </Text>
+                              );
+                            }
+                          })()}
+                        </View>
+                      </View>
+
+                      <View
+                        style={{
+                          height: 1,
+                          backgroundColor: '#ddd',
+                          marginVertical: 10,
+                        }}
+                      />
+
+                      {/* Product Description */}
+                      <View style={{ marginBottom: 10 }}>
+                        <Text style={styles.productDesc}>
+                          {formatDisplayText(item.deskripsi) ||
+                            'Tidak ada deskripsi'}
+                        </Text>
+                      </View>
+                    </>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.expandBtn}
+                    onPress={() =>
+                      setExpanded(expanded === item.id ? null : item.id)
+                    }
+                  >
+                    <View style={{ alignItems: 'center' }}>
+                      {expanded !== item.id && (
+                        <Text style={styles.expandText}>
+                          lihat selengkapnya
+                        </Text>
+                      )}
+                      <Image
+                        source={require('./assets/arrow-down.png')}
+                        style={{
+                          width: 18,
+                          height: 18,
+                          marginTop: expanded === item.id ? 0 : 4,
+                          transform: [
+                            {
+                              rotate: expanded === item.id ? '180deg' : '0deg',
+                            },
+                          ],
+                        }}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Bottom Navigation */}
@@ -465,7 +627,6 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#0070D8',
     textAlign: 'center',
-    marginTop: 82,
     marginBottom: 0,
   },
   subtitle: {
@@ -509,7 +670,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#BDBDBD',
     backgroundColor: '#fff',
-    padding: 16,
+    padding: 10,
   },
   switchCardActive: {
     backgroundColor: '#1976D2',
@@ -536,11 +697,16 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   switchLink: {
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
     fontSize: 13,
     color: '#1976D2',
     marginTop: 10,
   },
   switchLinkActive: {
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 13,
     color: '#fff',
   },
   categoryTitle: {
@@ -593,10 +759,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   productImageWrapper: {
-    borderRadius: 24,
+    borderRadius: 20,
     marginTop: 10,
-    width: 350,
-    height: 160,
+    width: 300,
+    height: 150,
     backgroundColor: '#112D4E',
     justifyContent: 'center',
     alignItems: 'center',
@@ -609,10 +775,11 @@ const styles = StyleSheet.create({
     shadowRadius: 5.8,
   },
   productImg: {
-    borderRadius: 24,
-    width: '100%',
-    height: 160,
-    resizeMode: 'cover',
+    borderRadius: 20,
+    width: 150,
+    height: 150,
+    resizeMode: 'contain',
+    alignSelf: 'center',
   },
   actionBtn: {
     position: 'absolute',
@@ -650,7 +817,18 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
     fontSize: 15,
     color: '#000000',
-    marginLeft: 10,
+    marginLeft: 0,
+  },
+  originalPrice: {
+    textDecorationLine: 'line-through',
+    color: '#999999',
+    fontSize: 12,
+  },
+  discountedPrice: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 18,
+    color: '#E53E3E',
   },
   productDesc: {
     fontFamily: FontFamily.outfit_light,
@@ -708,5 +886,30 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.medium,
     fontSize: 15,
     color: '#0070D8',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+    fontFamily: FontFamily.outfit_medium,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    fontFamily: FontFamily.outfit_medium,
   },
 });

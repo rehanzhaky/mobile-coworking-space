@@ -9,9 +9,12 @@ import {
   ImageBackground,
   SafeAreaView,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
+import ApiService from '../services/api';
 
 // Custom icons for register form - using fallback to existing icon for now
 const UserIcon = () => {
@@ -82,20 +85,114 @@ export default function RegisterScreen({ navigation }) {
   const [rePassword, setRePassword] = useState('');
   const [securePass, setSecurePass] = useState(true);
   const [secureRePass, setSecureRePass] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const validateForm = () => {
+    if (!username.trim()) {
+      Alert.alert('Error', 'Username harus diisi');
+      return false;
+    }
+
+    if (!email.trim()) {
+      Alert.alert('Error', 'Email harus diisi');
+      return false;
+    }
+
+    if (!email.includes('@')) {
+      Alert.alert('Error', 'Format email tidak valid');
+      return false;
+    }
+
+    if (!password.trim()) {
+      Alert.alert('Error', 'Password harus diisi');
+      return false;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password minimal 6 karakter');
+      return false;
+    }
+
+    if (password !== rePassword) {
+      Alert.alert('Error', 'Konfirmasi password tidak cocok');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleRegister = async () => {
+    console.log('handleRegister called');
+    if (!validateForm()) {
+      console.log('Form validation failed');
+      return;
+    }
+
+    console.log('Starting registration process...');
+    setLoading(true);
+
+    try {
+      // Test connection first
+      console.log('Testing connection to backend...');
+      const connectionTest = await ApiService.testConnection();
+      console.log('Connection test result:', connectionTest);
+
+      if (!connectionTest.success) {
+        Alert.alert(
+          'Connection Error',
+          `Cannot connect to server: ${connectionTest.error}`,
+        );
+        setLoading(false);
+        return;
+      }
+
+      const userData = {
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password,
+      };
+      console.log('Calling ApiService.registerUser with:', userData.email);
+
+      const result = await ApiService.registerUser(userData);
+      console.log('Registration result:', result);
+
+      if (result.success) {
+        console.log('Registration successful');
+        Alert.alert(
+          'Berhasil!',
+          'Akun Anda telah berhasil dibuat. Silakan login.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation?.navigate('Login'),
+            },
+          ],
+        );
+      } else {
+        console.log('Registration failed:', result.message);
+        Alert.alert('Error', result.message);
+      }
+    } catch (error) {
+      console.error('Registration catch error:', error);
+      Alert.alert('Error', 'Terjadi kesalahan. Silakan coba lagi.');
+    } finally {
+      console.log('Registration process completed');
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-    <LinearGradient
-          colors={['#FFFFFF', '#0070D8']}
-          locations={[0, 1]}
-          style={styles.gradientOverlay}
-        >
-      <ImageBackground
-        source={require('./assets/register-background.png')}
-        style={styles.backgroundImage}
-        resizeMode="cover"
+      <LinearGradient
+        colors={['#FFFFFF', '#0070D8']}
+        locations={[0, 1]}
+        style={styles.gradientOverlay}
       >
-        
+        <ImageBackground
+          source={require('./assets/register-background.png')}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        >
           <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
             <View style={styles.container}>
               <Text style={styles.header1}>Co-Working Space</Text>
@@ -174,10 +271,15 @@ export default function RegisterScreen({ navigation }) {
 
                 {/* Button */}
                 <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => navigation?.replace('Home')}
+                  style={[styles.button, loading && styles.disabledButton]}
+                  onPress={handleRegister}
+                  disabled={loading}
                 >
-                  <Text style={styles.buttonText}>Daftar</Text>
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Daftar</Text>
+                  )}
                 </TouchableOpacity>
 
                 {/* Already have an account */}
@@ -203,8 +305,7 @@ export default function RegisterScreen({ navigation }) {
               </View>
             </View>
           </ScrollView>
-        
-      </ImageBackground>
+        </ImageBackground>
       </LinearGradient>
     </SafeAreaView>
   );
@@ -226,18 +327,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: 40,
     paddingHorizontal: 0,
   },
   header1: {
-      fontFamily: FontFamily.outfit_semibold,
-      fontWeight: FontWeight.semibold,
-      fontSize: 20,
-      color: '#0070D8',
-      marginBottom: 30,
-      marginTop: 20,
-      marginLeft: -165,
-    },
+    fontFamily: FontFamily.outfit_semibold,
+    fontWeight: FontWeight.semibold,
+    fontSize: 20,
+    color: '#0070D8',
+    marginBottom: 30,
+    marginTop: 20,
+    marginLeft: -165,
+  },
   title: {
     fontFamily: FontFamily.outfit_semibold,
     fontWeight: FontWeight.semibold,
@@ -271,7 +371,7 @@ const styles = StyleSheet.create({
     fontWeight: 'semibold',
     fontSize: 18,
     color: '#0662CE',
-    marginTop: 14,
+    marginTop: 10,
     marginBottom: 7,
   },
   inputWrapper: {
@@ -283,7 +383,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginBottom: 2,
     backgroundColor: '#fff',
-    height: 54,
+    height: 45,
   },
   input: {
     fontFamily: FontFamily.outfit_regular,
@@ -301,6 +401,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
   buttonText: {
     ...TextStyles.button,
