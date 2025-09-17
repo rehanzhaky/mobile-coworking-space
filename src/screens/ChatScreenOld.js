@@ -15,7 +15,7 @@ import {
 import io from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/ApiService';
-} from 'react-native';
+import { Linking } from 'react-native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 
 // Dummy data for messages

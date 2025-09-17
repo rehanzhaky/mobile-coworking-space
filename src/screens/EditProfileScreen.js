@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { FontWeight, FontFamily } from '../styles/typography';
 import ApiService from '../services/api';
-import { launchImageLibrary } from 'react-native-image-picker';
+
 
 // Replace with your default profile image
 const DEFAULT_PROFILE = require('./assets/edit-profile.png');
@@ -107,40 +107,11 @@ export default function EditProfileScreen({ navigation }) {
   };
 
   const handlePhotoChange = () => {
-    const options = {
-      mediaType: 'photo',
-      includeBase64: true,
-      maxHeight: 2000,
-      maxWidth: 2000,
-      quality: 0.8,
-    };
-
-    Alert.alert('Pilih Foto', 'Pilih sumber foto profile', [
-      {
-        text: 'Galeri',
-        onPress: () => {
-          launchImageLibrary(options, response => {
-            if (response.didCancel || response.error) {
-              console.log('Image picker cancelled or error');
-              return;
-            }
-
-            if (response.assets && response.assets[0]) {
-              const asset = response.assets[0];
-              const imageUri = `data:${asset.type};base64,${asset.base64}`;
-
-              console.log('Image selected:', asset.fileName);
-              setPhoto({ uri: asset.uri });
-              setProfilePhoto(imageUri);
-            }
-          });
-        },
-      },
-      {
-        text: 'Batal',
-        style: 'cancel',
-      },
-    ]);
+    Alert.alert(
+      'Fitur Upload Foto',
+      'Fitur upload foto sedang dalam pengembangan dan akan segera tersedia.',
+      [{ text: 'OK', style: 'default' }]
+    );
   };
 
   const handleSave = async () => {

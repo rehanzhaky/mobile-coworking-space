@@ -13,9 +13,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'react-native-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 import ApiService from '../services/api';
-import FirebaseService from '../config/firebase';
+import FirebaseService from '../config/firebase_safe';
+import GoogleAuthService from '../services/googleAuth';
 
 // Custom icons for login form - using fallback to existing icon for now
 const UserIcon = () => {
@@ -56,11 +58,14 @@ const LockIcon = () => {
   }
 };
 
-export default function LoginScreen({ navigation }) {
-  const [usernameOrEmail, setUsernameOrEmail] = useState('');
+export default function LoginScreen({ navigation, route }) {
+  // Auto-fill email jika datang dari registrasi Google
+  const [usernameOrEmail, setUsernameOrEmail] = useState(route?.params?.googleEmail || '');
   const [password, setPassword] = useState('');
   const [securePass, setSecurePass] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [showWelcomeMessage, setShowWelcomeMessage] = useState(route?.params?.registrationSuccess || false);
 
   const validateForm = () => {
     if (!usernameOrEmail.trim()) {
@@ -152,6 +157,143 @@ export default function LoginScreen({ navigation }) {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    
+    try {
+      const result = await GoogleAuthService.signIn();
+      
+      if (result.success) {
+        // Auto-fill email field dengan email yang dipilih dari Google
+        if (result.user?.email) {
+          setUsernameOrEmail(result.user.email);
+        }
+
+        // 🔧 PENTING: Simpan data user dan token seperti login normal
+        try {
+          console.log('💾 Storing Google user data and token...');
+          console.log('📋 Debug - Full result object:', JSON.stringify(result, null, 2));
+          
+          // Store JWT token di AsyncStorage - FIXED MAPPING
+          const token = result.token || 
+                       result.backendUser?.token || 
+                       result.backendUser?.data?.token;
+          
+          console.log('🔍 Debug token paths:');
+          console.log('  result.token:', result.token);
+          console.log('  result.backendUser?.token:', result.backendUser?.token);
+          console.log('  result.backendUser?.data?.token:', result.backendUser?.data?.token);
+          
+          if (token) {
+            await AsyncStorage.setItem('userToken', token);
+            console.log('✅ Google login JWT token stored:', token);
+          } else {
+            console.error('❌ No token found in Google login result');
+            console.error('Full backendUser structure:', JSON.stringify(result.backendUser, null, 2));
+            
+            // CRITICAL: Don't proceed without token
+            throw new Error('No authentication token received from backend');
+          }
+          
+          // Store user data di ApiService tempUserStorage (sama seperti login normal)
+          // Mapping data sesuai struktur backend response
+          const backendUser = result.backendUser;
+          const googleUser = result.user;
+          
+          // FIXED: Correct mapping based on backend response structure
+          const userData = {
+            id: backendUser?.data?.user?.id || backendUser?.user?.id || backendUser?.id,
+            username: backendUser?.data?.user?.username || backendUser?.user?.username || googleUser?.email?.split('@')[0],
+            firstName: backendUser?.data?.user?.firstName || backendUser?.user?.firstName || googleUser?.givenName || googleUser?.name?.split(' ')[0],
+            lastName: backendUser?.data?.user?.lastName || backendUser?.user?.lastName || googleUser?.familyName || googleUser?.name?.split(' ').slice(1).join(' '), 
+            email: backendUser?.data?.user?.email || backendUser?.user?.email || googleUser?.email,
+            community: backendUser?.data?.user?.community || backendUser?.user?.community || 'Mobile Coworking Space',
+            profilePhoto: backendUser?.data?.user?.profilePhoto || backendUser?.user?.profilePhoto || googleUser?.photo,
+            isAdmin: backendUser?.data?.user?.isAdmin || backendUser?.user?.isAdmin || false,
+          };
+          
+          console.log('🔍 Debug user mapping:');
+          console.log('  backendUser structure keys:', Object.keys(backendUser || {}));
+          console.log('  backendUser?.data structure:', backendUser?.data ? Object.keys(backendUser.data) : 'N/A');
+          console.log('  Final userData.id:', userData.id);
+          console.log('  Final userData.username:', userData.username);
+          
+          console.log('📋 Debug - Mapped user data:', JSON.stringify(userData, null, 2));
+          
+          // Call ApiService to store user data (same as normal login)
+          const storeResult = await ApiService.storeUserData(userData);
+          console.log('✅ Google user data stored in ApiService:', storeResult);
+          
+          // Verifikasi data tersimpan dengan benar
+          const verifyUser = await ApiService.getCurrentUser();
+          console.log('🔍 Verification - Current user after storage:', verifyUser);
+          
+          const verifyLoggedIn = await ApiService.isLoggedIn();
+          console.log('🔍 Verification - Is logged in after storage:', verifyLoggedIn);
+          
+        } catch (storageError) {
+          console.error('❌ Failed to store Google user data:', storageError);
+          Alert.alert(
+            'Warning',
+            'Login berhasil, tetapi ada masalah menyimpan data. Silakan coba login ulang jika mengalami masalah.',
+            [{ text: 'OK' }]
+          );
+        }
+
+        // Register Firebase token setelah berhasil login dengan Google
+        try {
+          console.log('🔥 Registering Firebase token after Google login...');
+          await FirebaseService.registerToken();
+          console.log('✅ Firebase token registered successfully after Google login');
+        } catch (firebaseError) {
+          console.error(
+            '❌ Firebase token registration failed after Google login:',
+            firebaseError,
+          );
+        }
+
+        // Tampilkan pesan sukses dan redirect ke Home
+        Alert.alert(
+          'Login Berhasil!',
+          `Selamat datang ${result.user?.firstName || result.user?.name || result.user?.email}!`,
+          [
+            {
+              text: 'Masuk',
+              onPress: () => {
+                if (navigation) {
+                  navigation.replace('Home');
+                  console.log('Navigation to Home after Google login');
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        // Handle DEVELOPER_ERROR with user-friendly message
+        if (result.error?.includes('DEVELOPER_ERROR') || result.error?.includes('Unable to sign in')) {
+          Alert.alert(
+            'Informasi',
+            'Saat ini terjadi masalah konfigurasi Google Sign-In. Anda masih bisa login menggunakan username/email dan password.',
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        } else {
+          Alert.alert('Error', result.error || 'Gagal melakukan login dengan Google');
+        }
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      Alert.alert(
+        'Informasi',
+        'Saat ini Google Sign-In tidak tersedia. Silakan gunakan login dengan username/email dan password.',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient
@@ -171,6 +313,21 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.subtitle}>
                 Gunakan domain email komunitas anda
               </Text>
+
+              {/* Welcome Message untuk user yang baru registrasi Google */}
+              {showWelcomeMessage && (
+                <View style={styles.welcomeMessage}>
+                  <Text style={styles.welcomeText}>
+                    🎉 Registrasi berhasil! Sekarang Anda dapat masuk menggunakan tombol "Masuk dengan Google" di bawah ini.
+                  </Text>
+                  <TouchableOpacity 
+                    style={styles.closeWelcomeButton}
+                    onPress={() => setShowWelcomeMessage(false)}
+                  >
+                    <Text style={styles.closeWelcomeText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <View style={styles.formBox}>
                 {/* Username/Email */}
@@ -231,12 +388,22 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.orText}>Atau masuk dengan</Text>
 
                 {/* Google Button */}
-                <TouchableOpacity style={styles.googleBtn}>
-                  <Image
-                    source={require('./assets/google-icon.png')}
-                    style={{ width: 20, height: 20, marginRight: 10 }}
-                  />
-                  <Text style={styles.googleBtnText}>Masuk dengan Google</Text>
+                <TouchableOpacity 
+                  style={[styles.googleBtn, googleLoading && styles.disabledButton]}
+                  onPress={handleGoogleLogin}
+                  disabled={googleLoading}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color="#4285F4" size="small" />
+                  ) : (
+                    <Image
+                      source={require('./assets/google-icon.png')}
+                      style={{ width: 20, height: 20, marginRight: 10 }}
+                    />
+                  )}
+                  <Text style={styles.googleBtnText}>
+                    {googleLoading ? 'Masuk...' : 'Masuk dengan Google'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -384,5 +551,38 @@ const styles = StyleSheet.create({
     ...TextStyles.bodyLarge,
     fontSize: 18,
     color: '#000000',
+  },
+  welcomeMessage: {
+    backgroundColor: '#E8F4FD',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#0070D8',
+    position: 'relative',
+  },
+  welcomeText: {
+    fontFamily: FontFamily.outfit_regular,
+    fontSize: 14,
+    color: '#0070D8',
+    textAlign: 'center',
+    paddingRight: 20,
+  },
+  closeWelcomeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#0070D8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeWelcomeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

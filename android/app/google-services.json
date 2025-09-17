@@ -12,7 +12,20 @@
           "package_name": "com.mobile_coworking_space"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "568073459500-tpl0m54f4n77817rsktl8gr6gk5ftkcg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mobile_coworking_space",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "568073459500-rhngllmuujsmikn28dmvtiun42et0unm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyD5iYZzmf1RT8QkL3-VeAGuXkpCe9QReJI"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "568073459500-rhngllmuujsmikn28dmvtiun42et0unm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

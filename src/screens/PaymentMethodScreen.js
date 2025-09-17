@@ -8,6 +8,7 @@ import {
   ScrollView,
   Image,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import ApiService from '../services/api';
 import { FontWeight, FontFamily } from '../styles/typography';
@@ -39,32 +40,53 @@ const BankIcon = () => (
   />
 );
 
+// Sub-options untuk setiap kategori payment method
+const ewalletOptions = [
+  { id: 'gopay', label: 'GoPay', midtransType: 'gopay', description: 'Bayar dengan GoPay' },
+  { id: 'shopeepay', label: 'ShopeePay', midtransType: 'shopeepay', description: 'Bayar dengan ShopeePay' },
+  { id: 'dana', label: 'DANA', midtransType: 'dana', description: 'Bayar dengan DANA' },
+];
+
+const creditCardOptions = [
+  { id: 'add_card', label: 'Tambahkan Kartu', midtransType: 'credit_card', description: 'Visa, Mastercard, JCB' },
+];
+
+const bankTransferOptions = [
+  { id: 'bca', label: 'BCA Virtual Account', midtransType: 'bca_va', description: 'Transfer via BCA Virtual Account' },
+  { id: 'bni', label: 'BNI Virtual Account', midtransType: 'bni_va', description: 'Transfer via BNI Virtual Account' },
+  { id: 'bri', label: 'BRI Virtual Account', midtransType: 'bri_va', description: 'Transfer via BRI Virtual Account' },
+  { id: 'mandiri', label: 'Mandiri Bill Payment', midtransType: 'echannel', description: 'Transfer via Mandiri Bill Payment' },
+  { id: 'permata', label: 'Permata Virtual Account', midtransType: 'permata_va', description: 'Transfer via Permata Virtual Account' },
+];
+
 const paymentOptions = [
   {
     id: 'ewallet',
     label: 'E-Wallet',
     icon: EWalletIcon,
     midtransType: 'ewallet',
-    description: 'GoPay, ShopeePay, DANA, OVO, LinkAja',
+    subOptions: ewalletOptions,
   },
   {
     id: 'credit_card',
     label: 'Kartu Kredit/Debit',
     icon: CardIcon,
     midtransType: 'credit_card',
-    description: 'Visa, Mastercard, JCB',
+    subOptions: creditCardOptions,
   },
   {
     id: 'bank_transfer',
     label: 'Transfer Bank',
     icon: BankIcon,
     midtransType: 'bank_transfer',
-    description: 'BCA, BNI, BRI, Mandiri, Permata',
+    subOptions: bankTransferOptions,
   },
 ];
 
 export default function PaymentMethodScreen({ navigation, route }) {
-  const [selected, setSelected] = useState(paymentOptions[0].id);
+  const [selected, setSelected] = useState(null); // Main category selection
+  const [selectedSub, setSelectedSub] = useState(null); // Sub-option selection
+  const [expandedCategory, setExpandedCategory] = useState(null); // Which category is expanded
   const [loading, setLoading] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState(null);
 
@@ -100,80 +122,140 @@ export default function PaymentMethodScreen({ navigation, route }) {
             const isAvailable = paymentMethods
               ? paymentMethods[opt.midtransType]?.enabled
               : true;
+            const isExpanded = expandedCategory === opt.id;
+            const isSelected = selected === opt.id;
 
             return (
-              <TouchableOpacity
-                key={opt.id}
-                style={[
-                  styles.optionBox,
-                  selected === opt.id && styles.optionBoxActive,
-                  !isAvailable && styles.optionBoxDisabled,
-                ]}
-                activeOpacity={isAvailable ? 0.7 : 1}
-                onPress={() => isAvailable && setSelected(opt.id)}
-                disabled={!isAvailable}
-              >
-                <View style={styles.optionContent}>
-                  <opt.icon />
-                  <View style={styles.optionText}>
-                    <Text
-                      style={[
-                        styles.optionLabel,
-                        !isAvailable && styles.disabledText,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.optionDescription,
-                        !isAvailable && styles.disabledText,
-                      ]}
-                    >
-                      {opt.description}
-                    </Text>
-                    {!isAvailable && (
-                      <Text style={styles.unavailableText}>Tidak tersedia</Text>
-                    )}
-                  </View>
-                </View>
-                <View
+              <View key={opt.id} style={styles.categoryContainer}>
+                {/* Main Category Option */}
+                <TouchableOpacity
                   style={[
-                    styles.radio,
-                    selected === opt.id && styles.radioActive,
+                    styles.optionBox,
+                    isSelected && styles.optionBoxActive,
+                    !isAvailable && styles.optionBoxDisabled,
                   ]}
+                  activeOpacity={isAvailable ? 0.7 : 1}
+                  onPress={() => {
+                    if (!isAvailable) return;
+                    
+                    if (isExpanded) {
+                      // Collapse if already expanded
+                      setExpandedCategory(null);
+                      setSelected(null);
+                      setSelectedSub(null);
+                    } else {
+                      // Expand this category
+                      setExpandedCategory(opt.id);
+                      setSelected(opt.id);
+                      setSelectedSub(null);
+                    }
+                  }}
+                  disabled={!isAvailable}
                 >
-                  {selected === opt.id && <View style={styles.radioInner} />}
-                </View>
-              </TouchableOpacity>
+                  <View style={styles.optionContent}>
+                    <opt.icon />
+                    <View style={styles.optionText}>
+                      <Text
+                        style={[
+                          styles.optionLabel,
+                          !isAvailable && styles.disabledText,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                      {/* <Text
+                        style={[
+                          styles.optionDescription,
+                          !isAvailable && styles.disabledText,
+                        ]}
+                      >
+                        {opt.description}
+                      </Text> */}
+                      {!isAvailable && (
+                        <Text style={styles.unavailableText}>Tidak tersedia</Text>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.expandIndicator}>
+                    <Image
+                      source={require('./assets/arrow-down.png')}
+                      style={[
+                        styles.expandIcon,
+                        isExpanded && styles.expandIconRotated
+                      ]}
+                    />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Sub-options Dropdown */}
+                {isExpanded && (
+                  <View style={styles.subOptionsContainer}>
+                    {opt.subOptions.map((subOpt, index) => (
+                      <TouchableOpacity
+                        key={subOpt.id}
+                        style={[
+                          styles.subOptionBox,
+                          selectedSub === subOpt.id && styles.subOptionBoxActive,
+                          index === opt.subOptions.length - 1 && styles.subOptionBoxLast
+                        ]}
+                        onPress={() => setSelectedSub(subOpt.id)}
+                      >
+                        <View style={styles.subOptionContent}>
+                          <Text style={styles.subOptionLabel}>{subOpt.label}</Text>
+                          <Text style={styles.subOptionDescription}>{subOpt.description}</Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.radio,
+                            selectedSub === subOpt.id && styles.radioActive,
+                          ]}
+                        >
+                          {selectedSub === subOpt.id && <View style={styles.radioInner} />}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
             );
           })}
         </View>
 
         <TouchableOpacity
-          style={[styles.nextBtn, loading && styles.nextBtnDisabled]}
+          style={[
+            styles.nextBtn, 
+            (loading || !selectedSub) && styles.nextBtnDisabled
+          ]}
           activeOpacity={0.8}
-          disabled={loading}
+          disabled={loading || !selectedSub}
           onPress={() => {
-            if (loading) return;
+            if (loading || !selectedSub) return;
 
             setLoading(true);
 
             // Get selected payment method details
-            const selectedPaymentMethod = paymentOptions.find(
+            const selectedCategory = paymentOptions.find(
               option => option.id === selected,
             );
 
-            // Prepare payment data with Midtrans specifics
+            const selectedSubOption = selectedCategory?.subOptions.find(
+              subOpt => subOpt.id === selectedSub
+            );
+
+            // Prepare payment data with specific Midtrans type
             const paymentData = {
-              method: selected,
-              midtransType: selectedPaymentMethod?.midtransType,
-              label: selectedPaymentMethod?.label || 'Unknown',
-              description: selectedPaymentMethod?.description,
+              method: selected, // Main category (ewallet, credit_card, bank_transfer)
+              subMethod: selectedSub, // Specific method (gopay, bca, etc.)
+              midtransType: selectedSubOption?.midtransType, // Specific Midtrans payment type
+              label: selectedSubOption?.label || 'Unknown',
+              description: selectedSubOption?.description,
+              categoryLabel: selectedCategory?.label,
               details: {
-                enabled_payments: [selectedPaymentMethod?.midtransType],
+                enabled_payments: [selectedSubOption?.midtransType],
               },
             };
+
+            console.log('🎯 Selected Payment Method:', paymentData);
 
             // Navigate to CheckoutDetailScreen with all data
             navigation?.navigate('CheckoutDetailScreen', {
@@ -226,8 +308,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 13,
-    marginBottom: 24,
+    paddingVertical: 14,
+    marginBottom: 10,
     backgroundColor: '#fff',
   },
   optionBoxActive: {
@@ -250,11 +332,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionLabel: {
-    fontFamily: FontFamily.outfit_medium,
-    fontWeight: FontWeight.medium,
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
     fontSize: 18,
     color: '#17203A',
-    marginBottom: 2,
   },
   optionDescription: {
     fontFamily: FontFamily.outfit_regular,
@@ -307,5 +388,61 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.regular,
     color: '#fff',
     fontSize: 20,
+  },
+  // New styles for dropdown functionality
+  categoryContainer: {
+    marginBottom: 24,
+  },
+  expandIndicator: {
+    marginLeft: 10,
+  },
+  expandIcon: {
+    width: 16,
+    height: 16,
+    tintColor: '#666',
+    transform: [{ rotate: '0deg' }],
+  },
+  expandIconRotated: {
+    transform: [{ rotate: '180deg' }],
+  },
+  subOptionsContainer: {
+    marginTop: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  subOptionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+    backgroundColor: '#fff',
+  },
+  subOptionBoxActive: {
+    backgroundColor: '#e3f2fd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#0070D8',
+  },
+  subOptionBoxLast: {
+    borderBottomWidth: 0,
+  },
+  subOptionContent: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  subOptionLabel: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 16,
+    color: '#17203A',
+    marginBottom: 2,
+  },
+  subOptionDescription: {
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 12,
+    color: '#666',
   },
 });

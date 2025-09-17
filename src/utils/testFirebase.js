@@ -2,7 +2,7 @@
  * Test Firebase Service Import
  */
 
-import FirebaseService from '../config/firebase';
+import FirebaseService from '../config/firebase_safe';
 
 console.log('🧪 Testing Firebase Service import...');
 console.log('FirebaseService:', FirebaseService);

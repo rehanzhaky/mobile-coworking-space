@@ -8,19 +8,18 @@ let tempUserStorage = null;
 // Base URL untuk backend API
 // Dinamis berdasarkan platform dan device type
 const getBaseURL = () => {
-  // Untuk Real Device (Android/iOS)
-  // Ganti dengan IP address komputer Anda di jaringan WiFi yang sama
-  const COMPUTER_IP = '192.168.1.4'; // Update sesuai IP komputer Anda
-
+  // Untuk Android Emulator - gunakan 10.0.2.2
+  const EMULATOR_IP = '10.0.2.2';
+  
   if (Platform.OS === 'android') {
-    // Untuk Real Android Device
-    return `http://${COMPUTER_IP}:5000/api`;
+    // Untuk Android Emulator
+    return `http://${EMULATOR_IP}:5000/api`;
   } else if (Platform.OS === 'ios') {
-    // Untuk Real iOS Device
-    return `http://${COMPUTER_IP}:5000/api`;
+    // Untuk iOS Simulator
+    return 'http://localhost:5000/api';
   } else {
-    // Fallback untuk emulator
-    return 'http://10.0.2.2:5000/api';
+    // Fallback untuk web atau platform lain
+    return 'http://localhost:5000/api';
   }
 };
 
@@ -135,6 +134,10 @@ class ApiService {
         await AsyncStorage.setItem('userToken', response.data.token);
         console.log('✅ JWT token stored in AsyncStorage');
 
+        // Also store user data as backup in AsyncStorage
+        await AsyncStorage.setItem('userData', JSON.stringify(tempUserStorage));
+        console.log('✅ User data backup stored in AsyncStorage');
+
         console.log('User data stored in tempUserStorage:', tempUserStorage);
 
         return {
@@ -164,18 +167,72 @@ class ApiService {
   // Get current user from storage
   static async getCurrentUser() {
     try {
-      // If no user data, set demo data for testing auto-fill
+      console.log('🔍 Debug getCurrentUser - tempUserStorage:', tempUserStorage);
+      
+      // If no user data in memory, try to get from AsyncStorage
       if (!tempUserStorage) {
+        console.log('⚠️ No tempUserStorage found, checking AsyncStorage for token...');
+        const token = await AsyncStorage.getItem('userToken');
+        
+        if (token) {
+          console.log('✅ Token found, attempting to fetch user profile from server');
+          try {
+            // Try to get user profile from server using the token
+            const response = await api.get('/profile', {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (response.data && response.data.success) {
+              // Restore user data to temp storage
+              tempUserStorage = {
+                id: response.data.user.id,
+                username: response.data.user.username,
+                firstName: response.data.user.firstName,
+                lastName: response.data.user.lastName,
+                email: response.data.user.email,
+                community: response.data.user.community,
+                profilePhoto: response.data.user.profilePhoto,
+                isAdmin: response.data.user.isAdmin,
+              };
+              console.log('✅ User data restored from server:', tempUserStorage);
+              return tempUserStorage;
+            }
+          } catch (profileError) {
+            console.error('❌ Failed to fetch profile from server:', profileError);
+            // Token might be invalid, clear it
+            await AsyncStorage.removeItem('userToken');
+          }
+        }
+        
+        // Check if we have stored user data in AsyncStorage as backup
+        try {
+          const storedUserData = await AsyncStorage.getItem('userData');
+          if (storedUserData) {
+            tempUserStorage = JSON.parse(storedUserData);
+            console.log('✅ User data restored from AsyncStorage backup:', tempUserStorage);
+            return tempUserStorage;
+          }
+        } catch (storageError) {
+          console.error('❌ Failed to get user data from AsyncStorage:', storageError);
+        }
+        
+        // If still no user data, use demo data for testing
+        console.log('📋 No user data found, using demo data for testing');
         tempUserStorage = {
-          id: 'demo123',
-          username: 'demouser',
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@demo.com',
+          id: 2, // Use ID 2 to match with our chat system
+          username: 'testuser',
+          firstName: 'Test',
+          lastName: 'User',
+          email: 'test@demo.com',
           community: 'Demo Community Jakarta',
           profilePhoto: null,
           isAdmin: false,
         };
+        
+        // Store demo data as backup
+        await AsyncStorage.setItem('userData', JSON.stringify(tempUserStorage));
       }
 
       return tempUserStorage;
@@ -189,9 +246,10 @@ class ApiService {
   static async logoutUser() {
     try {
       tempUserStorage = null;
-      // Clear token from AsyncStorage
+      // Clear token and user data from AsyncStorage
       await AsyncStorage.removeItem('userToken');
-      console.log('✅ User token cleared from AsyncStorage');
+      await AsyncStorage.removeItem('userData');
+      console.log('✅ User token and data cleared from AsyncStorage');
       return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
@@ -199,11 +257,41 @@ class ApiService {
     }
   }
 
+  // Store user data (untuk Google Sign-In dan login lainnya)
+  static async storeUserData(userData) {
+    try {
+      console.log('📦 Storing user data in tempUserStorage:', userData);
+      
+      tempUserStorage = {
+        id: userData.id,
+        username: userData.username,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        community: userData.community || 'Mobile Coworking Space',
+        profilePhoto: userData.profilePhoto || null,
+        isAdmin: userData.isAdmin || false,
+      };
+      
+      console.log('✅ User data stored successfully:', tempUserStorage);
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Store user data error:', error);
+      return { success: false, error };
+    }
+  }
+
   // Check if user is logged in
   static async isLoggedIn() {
     try {
       const token = await AsyncStorage.getItem('userToken');
-      return token !== null && tempUserStorage !== null;
+      console.log('🔍 Debug isLoggedIn - Token:', token ? '✅ Found' : '❌ Not found');
+      console.log('🔍 Debug isLoggedIn - tempUserStorage:', tempUserStorage ? '✅ Found' : '❌ Not found');
+      
+      const isLoggedIn = token !== null && tempUserStorage !== null;
+      console.log('🔍 Debug isLoggedIn - Final result:', isLoggedIn);
+      
+      return isLoggedIn;
     } catch (error) {
       console.error('Check login status error:', error);
       return false;
@@ -323,9 +411,18 @@ class ApiService {
     try {
       console.log('Creating Midtrans transaction with data:', orderData);
 
-      const response = await api.post('/payment/midtrans/create', orderData);
+      // Use postSecure instead of post to include authentication header
+      const response = await this.postSecure('/payment/midtrans/create', orderData);
+      
+      console.log('📥 Raw postSecure response:', response);
+      console.log('🔍 Response structure:', {
+        success: response.success,
+        data: response.data,
+        status: response.status,
+        error: response.error
+      });
 
-      if (response.data.success) {
+      if (response.success && response.data && response.data.success) {
         console.log(
           'Midtrans transaction created successfully:',
           response.data,
@@ -336,20 +433,17 @@ class ApiService {
           message: 'Transaction created successfully',
         };
       } else {
-        throw new Error(
-          response.data.message || 'Failed to create transaction',
-        );
+        const errorMessage = response.data?.message || response.error || 'Failed to create transaction';
+        console.log('❌ Transaction creation failed:', errorMessage);
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      console.log('Create Midtrans transaction error:', error.message);
+      console.error('Create Midtrans transaction error:', error.message);
       // Return failure so UI can show demo mode
       return {
         success: false,
         message: 'Failed to create Midtrans transaction',
-        error:
-          error.response?.status === 404
-            ? 'ENDPOINT_NOT_FOUND'
-            : 'NETWORK_ERROR',
+        error: error.message || 'NETWORK_ERROR',
       };
     }
   }
@@ -483,6 +577,50 @@ class ApiService {
     }
   }
 
+  // Authenticated GET request - adds Authorization header automatically
+  static async getSecure(endpoint, config = {}) {
+    try {
+      console.log(`🔐 Secure GET request to: ${BASE_URL}${endpoint}`);
+      
+      // Get token from AsyncStorage
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        console.log('❌ No token found for authenticated request');
+        return {
+          success: false,
+          error: 'No authentication token found',
+          status: 401,
+        };
+      }
+
+      console.log('🔐 Adding Authorization header with token');
+      
+      // Add Authorization header
+      const authConfig = {
+        ...config,
+        headers: {
+          ...config.headers,
+          'Authorization': `Bearer ${token}`,
+        },
+      };
+
+      const response = await api.get(endpoint, authConfig);
+      console.log(`✅ Secure GET response:`, response.status);
+      return {
+        success: true,
+        data: response.data,
+        status: response.status,
+      };
+    } catch (error) {
+      console.error(`❌ Secure GET error for ${endpoint}:`, error.message);
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+      };
+    }
+  }
+
   static async post(endpoint, data = {}, config = {}) {
     try {
       console.log(`📡 POST request to: ${BASE_URL}${endpoint}`);
@@ -496,6 +634,50 @@ class ApiService {
       };
     } catch (error) {
       console.error(`❌ POST error for ${endpoint}:`, error.message);
+      return {
+        success: false,
+        error: error.response?.data || error.message,
+        status: error.response?.status,
+      };
+    }
+  }
+
+  static async postSecure(endpoint, data = {}, config = {}) {
+    try {
+      console.log(`🔐 Secure POST request to: ${BASE_URL}${endpoint}`);
+      
+      // Get token from AsyncStorage
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        console.log('❌ No token found for authenticated request');
+        return {
+          success: false,
+          error: 'No authentication token found',
+          status: 401,
+        };
+      }
+
+      console.log('🔐 Adding Authorization header with token');
+      console.log('📝 POST data:', data);
+      
+      // Add Authorization header
+      const authConfig = {
+        ...config,
+        headers: {
+          ...config.headers,
+          'Authorization': `Bearer ${token}`,
+        },
+      };
+
+      const response = await api.post(endpoint, data, authConfig);
+      console.log(`✅ Secure POST response:`, response.status);
+      return {
+        success: true,
+        data: response.data,
+        status: response.status,
+      };
+    } catch (error) {
+      console.error(`❌ Secure POST error for ${endpoint}:`, error.message);
       return {
         success: false,
         error: error.response?.data || error.message,

@@ -7,7 +7,10 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  ActivityIndicator,
+  PanResponder,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
@@ -28,18 +31,163 @@ export default function ProductDetailScreen({ navigation, route }) {
   const { product } = route.params || {};
   const [promotions, setPromotions] = useState([]);
   const [loadingPromotions, setLoadingPromotions] = useState(true);
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  // Helper function to get array of images
+  const getProductImages = (product) => {
+    const images = [];
+    
+    console.log('🔍 getProductImages - Input product:', product);
+    
+    // If product has multiple images (array)
+    if (product?.images && Array.isArray(product.images)) {
+      const validImages = product.images.filter(img => img && img.trim() !== '');
+      console.log('📷 Found images array:', validImages);
+      return validImages;
+    }
+    
+    // Check gambarUrl (main image from backend API)
+    if (product?.gambarUrl && product.gambarUrl.trim() !== '') {
+      images.push(product.gambarUrl);
+      console.log('📷 Added gambarUrl:', product.gambarUrl);
+    }
+    
+    // Check gambarUrl2 (second image from backend API)
+    if (product?.gambarUrl2 && product.gambarUrl2.trim() !== '') {
+      images.push(product.gambarUrl2);
+      console.log('📷 Added gambarUrl2:', product.gambarUrl2);
+    }
+    
+    // Check gambarUrl3 (third image from backend API)
+    if (product?.gambarUrl3 && product.gambarUrl3.trim() !== '') {
+      images.push(product.gambarUrl3);
+      console.log('📷 Added gambarUrl3:', product.gambarUrl3);
+    }
+    
+    // If product has single image property (fallback)
+    if (product?.image && product.image.trim() !== '' && !images.includes(product.image)) {
+      images.push(product.image);
+      console.log('📷 Added fallback image:', product.image);
+    }
+    
+    // If product has image1, image2, image3 properties (mock data compatibility)
+    if (product?.image1 && product.image1.trim() !== '' && !images.includes(product.image1)) {
+      images.push(product.image1);
+      console.log('📷 Added image1:', product.image1);
+    }
+    if (product?.image2 && product.image2.trim() !== '' && !images.includes(product.image2)) {
+      images.push(product.image2);
+      console.log('📷 Added image2:', product.image2);
+    }
+    if (product?.image3 && product.image3.trim() !== '' && !images.includes(product.image3)) {
+      images.push(product.image3);
+      console.log('📷 Added image3:', product.image3);
+    }
+    
+    console.log('📷 Final images array:', images);
+    console.log('📊 Total images count:', images.length);
+    
+    // Return images or default placeholder if no images
+    return images.length > 0 ? images : [require('./assets/absensi-staff.png')];
+  };
+
+  const productImages = getProductImages(product?.id ? product : currentProduct);
+
+  // Pan responder for swipe gestures
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      return Math.abs(gestureState.dx) > 20 && productImages.length > 1;
+    },
+    onPanResponderMove: (evt, gestureState) => {
+      // Could add drag animation here if needed
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      if (productImages.length > 1) {
+        if (gestureState.dx > 50) {
+          // Swipe right - previous image
+          const prevIndex = currentImageIndex === 0 ? productImages.length - 1 : currentImageIndex - 1;
+          setCurrentImageIndex(prevIndex);
+        } else if (gestureState.dx < -50) {
+          // Swipe left - next image
+          const nextIndex = (currentImageIndex + 1) % productImages.length;
+          setCurrentImageIndex(nextIndex);
+        }
+      }
+    }
+  });
 
   useEffect(() => {
     fetchPromotions();
   }, []);
+
+  useEffect(() => {
+    // Fetch reviews ketika tab ulasan dipilih
+    if (activeTab === 3 && product?.id) {
+      console.log('🎯 Fetching reviews for real product ID:', product.id);
+      fetchReviews();
+    } else if (activeTab === 3) {
+      console.log('⚠️ No product ID available, cannot fetch reviews');
+      setReviews([]);
+    }
+  }, [activeTab, product?.id]);
 
   // Refresh promotions when screen is focused (untuk update real-time dari admin)
   useFocusEffect(
     React.useCallback(() => {
       console.log('ProductDetailScreen focused - refreshing promotions');
       fetchPromotions();
-    }, []),
+      // Juga refresh reviews jika sedang di tab ulasan
+      if (activeTab === 3 && product?.id) {
+        console.log('🔄 Focus refresh: Fetching reviews for real product ID:', product.id);
+        fetchReviews();
+      }
+    }, [activeTab, product?.id]),
   );
+
+  const fetchReviews = async () => {
+    try {
+      setLoadingReviews(true);
+      console.log('🔄 Fetching product reviews for REAL product ID:', product?.id);
+      console.log('🔍 Product object:', product);
+      
+      if (!product?.id) {
+        console.log('❌ No valid product ID provided');
+        setReviews([]);
+        return;
+      }
+      
+      const response = await ApiService.getSecure(`/reviews/product/${product.id}`);
+      console.log('📥 Product reviews API response:', response);
+      console.log('🔍 Response data structure:', JSON.stringify(response.data, null, 2));
+      
+      if (response.success) {
+        // Handle multiple possible response structures
+        let reviewsData = [];
+        if (Array.isArray(response.data?.data)) {
+          reviewsData = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          reviewsData = response.data;
+        } else if (response.data && Array.isArray(response.data.reviews)) {
+          reviewsData = response.data.reviews;
+        }
+        
+        console.log('✅ Product reviews data:', reviewsData);
+        console.log('📊 Number of product reviews:', reviewsData.length);
+        setReviews(reviewsData);
+      } else {
+        console.log('❌ Error fetching product reviews:', response.message || response.error);
+        setReviews([]);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching product reviews:', error);
+      setReviews([]);
+    } finally {
+      setLoadingReviews(false);
+    }
+  };
 
   const fetchPromotions = async () => {
     try {
@@ -232,6 +380,10 @@ export default function ProductDetailScreen({ navigation, route }) {
     harga: '0',
     rating: 5,
     gambarUrl: null,
+    // Test multiple images
+    image1: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80',
+    image2: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80',
+    image3: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80',
     kategori: 'Produk',
     katalog: 'Satuan',
     fitur: null,
@@ -332,7 +484,7 @@ export default function ProductDetailScreen({ navigation, route }) {
     subtitle:
       currentProduct.deskripsi?.substring(0, 100) || currentProduct.subtitle,
     price: formatPrice(currentProduct.harga) || currentProduct.price,
-    rating: currentProduct.rating || 5,
+    rating: currentProduct.rating || null, // Remove dummy fallback
     image: currentProduct.gambarUrl || currentProduct.image,
     type: currentProduct.kategori?.toLowerCase() || currentProduct.type,
     action: getActionText(currentProduct.kategori) || currentProduct.action,
@@ -369,26 +521,58 @@ export default function ProductDetailScreen({ navigation, route }) {
           <Text style={styles.headerTitle}>{displayData.title}</Text>
         </View>
 
-        {/* Product Image with carousel indicator (dummy, single image) */}
+        {/* Product Image with dynamic carousel indicator */}
         <View style={styles.imageContainer}>
-          <Image
-            source={
-              displayData.image &&
-              typeof displayData.image === 'string' &&
-              displayData.image.startsWith('http')
-                ? { uri: displayData.image }
-                : require('./assets/absensi-staff.png')
-            }
-            style={styles.productImage}
-            resizeMode="contain"
-            onError={() =>
-              console.log('Image load error for:', displayData.title)
-            }
-          />
-          <View style={styles.carouselIndicator}>
-            <View style={[styles.dot, { backgroundColor: '#1976D2' }]} />
-            <View style={styles.dot} />
-          </View>
+          <TouchableOpacity 
+            style={styles.imageWrapper}
+            onPress={() => {
+              if (productImages.length > 1) {
+                const nextIndex = (currentImageIndex + 1) % productImages.length;
+                setCurrentImageIndex(nextIndex);
+              }
+            }}
+            {...panResponder.panHandlers}
+          >
+            {imageLoading && (
+              <ActivityIndicator 
+                size="small" 
+                color="#1976D2" 
+                style={styles.imageLoadingIndicator}
+              />
+            )}
+            <Image
+              source={
+                typeof productImages[currentImageIndex] === 'string' && productImages[currentImageIndex].startsWith('http')
+                  ? { uri: productImages[currentImageIndex] }
+                  : productImages[currentImageIndex]
+              }
+              style={styles.productImage}
+              resizeMode="contain"
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+              onError={() => {
+                console.log('Image load error for image:', currentImageIndex, productImages[currentImageIndex]);
+                setImageLoading(false);
+              }}
+            />
+          </TouchableOpacity>
+          
+          {/* Dynamic carousel indicator */}
+          {productImages.length > 1 && (
+            <View style={styles.carouselIndicator}>
+              {productImages.map((_, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => setCurrentImageIndex(index)}
+                  style={
+                    index === currentImageIndex 
+                      ? styles.activeDot 
+                      : [styles.dot, { backgroundColor: '#E0E0E0' }]
+                  }
+                />
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Deskripsi */}
@@ -536,38 +720,155 @@ export default function ProductDetailScreen({ navigation, route }) {
           {activeTab === 3 && (
             <View>
               {/* Rating Section in Ulasan Tab */}
-              <View style={styles.ratingContainer}>
-                <Text style={styles.ratingLabel}>Rating Produk: </Text>
-                <View style={styles.starsContainer}>
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <View key={i} style={{ marginRight: i < 5 ? 2 : 0 }}>
-                      <Image
-                        source={
-                          i <= displayData.rating
-                            ? require('./assets/Star-Yellow.png')
-                            : require('./assets/Star.png')
-                        }
-                        style={{ width: 16, height: 16 }}
-                      />
+              {!loadingReviews && reviews.length > 0 && (
+                <View style={styles.ratingContainer}>
+                  <Text style={styles.ratingLabel}>Rating Produk: </Text>
+                  <View style={styles.starsContainer}>
+                    {(() => {
+                      const avgRating = reviews.length > 0 ? 
+                        (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) : 0;
+                      return [1, 2, 3, 4, 5].map(i => (
+                        <View key={i} style={{ marginRight: i < 5 ? 2 : 0 }}>
+                          <Image
+                            source={
+                              i <= Math.round(avgRating)
+                                ? require('./assets/Star-Yellow.png')
+                                : require('./assets/Star.png')
+                            }
+                            style={{ width: 16, height: 16 }}
+                          />
+                        </View>
+                      ));
+                    })()}
+                  </View>
+                  <Text style={styles.ratingText}>
+                    ({reviews.length > 0 ? 
+                      (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1) : 0}/5)
+                  </Text>
+                </View>
+              )}
+
+              {/* Show message when no reviews */}
+              {!loadingReviews && reviews.length === 0 && product?.id && (
+                <View style={styles.ratingContainer}>
+                  <Text style={styles.ratingLabel}>Rating Produk: </Text>
+                  <Text style={styles.noRatingText}>Belum ada rating</Text>
+                </View>
+              )}
+
+              {/* Show message for dummy/default product */}
+              {!product?.id && (
+                <View style={styles.ratingContainer}>
+                  <Text style={styles.ratingLabel}>Rating Produk: </Text>
+                  <Text style={styles.noRatingText}>Data produk tidak valid</Text>
+                </View>
+              )}
+
+              {/* Reviews Summary */}
+              {!loadingReviews && reviews.length > 0 && (
+                <View style={styles.reviewsSummary}>
+                  <Text style={styles.reviewsSummaryTitle}>
+                    Ulasan Pengguna ({reviews.length} ulasan)
+                  </Text>
+                  {/* Average Rating Calculation */}
+                  {(() => {
+                    const avgRating = reviews.length > 0 ? 
+                      (reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length).toFixed(1) : 0;
+                    return (
+                      <View style={styles.averageRatingContainer}>
+                        <Text style={styles.averageRatingText}>Rating rata-rata: </Text>
+                        <View style={styles.averageStars}>
+                          {[1, 2, 3, 4, 5].map(i => (
+                            <Image
+                              key={i}
+                              source={
+                                i <= Math.round(avgRating)
+                                  ? require('./assets/Star-Yellow.png')
+                                  : require('./assets/Star.png')
+                              }
+                              style={{ width: 14, height: 14, marginRight: 1 }}
+                            />
+                          ))}
+                        </View>
+                        <Text style={styles.averageRatingValue}>({avgRating}/5)</Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+              )}
+
+              {/* Loading State */}
+              {loadingReviews && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#007BFF" />
+                  <Text style={{ marginTop: 10, color: '#666' }}>Memuat ulasan...</Text>
+                </View>
+              )}
+
+              {/* Reviews List */}
+              {!loadingReviews && reviews.length > 0 && (
+                <View style={{ marginTop: 10 }}>
+                  {reviews.map((review, index) => (
+                    <View key={review.id} style={styles.reviewItem}>
+                      <View style={styles.reviewHeader}>
+                        <View style={styles.reviewUserInfo}>
+                          <Text style={styles.reviewUserName}>
+                            {review.userName || 'Anonymous'}
+                          </Text>
+                          {review.isVerified && (
+                            <Text style={styles.verifiedBadge}>✓</Text>
+                          )}
+                        </View>
+                        <View style={styles.reviewStars}>
+                          {[1, 2, 3, 4, 5].map(i => (
+                            <Image
+                              key={i}
+                              source={
+                                i <= review.rating
+                                  ? require('./assets/Star-Yellow.png')
+                                  : require('./assets/Star.png')
+                              }
+                              style={{ width: 12, height: 12, marginRight: 2 }}
+                            />
+                          ))}
+                        </View>
+                      </View>
+                      <Text style={styles.reviewComment}>"{review.comment}"</Text>
+                      <View style={styles.reviewFooter}>
+                        <Text style={styles.reviewDate}>
+                          {new Date(review.createdAt).toLocaleDateString('id-ID', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </Text>
+                        {review.orderId && (
+                          <Text style={styles.reviewOrderId}>Order: {review.orderId}</Text>
+                        )}
+                      </View>
+                      {index < reviews.length - 1 && <View style={styles.reviewDivider} />}
                     </View>
                   ))}
                 </View>
-                <Text style={styles.ratingText}>({displayData.rating}/5)</Text>
-              </View>
+              )}
 
-              {/* Sample Reviews */}
-              <Text style={styles.bullet}>
-                • "Sangat membantu dalam mengelola operasional harian" - User A
-              </Text>
-              <Text style={styles.bullet}>
-                • "Interface yang mudah dipahami dan user-friendly" - User B
-              </Text>
-              <Text style={styles.bullet}>
-                • "Recommend untuk semua jenis bisnis" - User C
-              </Text>
-              <Text style={styles.bullet}>
-                • "Support team sangat responsif dan helpful" - User D
-              </Text>
+              {/* Empty State */}
+              {!loadingReviews && reviews.length === 0 && product?.id && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: '#666', textAlign: 'center' }}>
+                    Belum ada ulasan untuk produk ini
+                  </Text>
+                </View>
+              )}
+
+              {/* Invalid product state */}
+              {!product?.id && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: '#666', textAlign: 'center' }}>
+                    Data produk tidak valid - tidak dapat menampilkan ulasan
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -623,13 +924,25 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 12,
     overflow: 'hidden',
+    height: 200,
+    backgroundColor: '#fff',
+  },
+  imageWrapper: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 16,
-    backgroundColor: '#fff',
   },
   productImage: {
     width: width * 0.7,
     height: 160,
+  },
+  imageLoadingIndicator: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -10 }, { translateY: -10 }],
+    zIndex: 1,
   },
   carouselIndicator: {
     flexDirection: 'column',
@@ -644,6 +957,13 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#ebebeb',
+    marginVertical: 4,
+  },
+  activeDot: {
+    width: 10,
+    height: 30,
+    borderRadius: 5,
+    backgroundColor: '#1976D2',
     marginVertical: 4,
   },
   descText: {
@@ -675,6 +995,11 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 14,
     color: '#666',
+  },
+  noRatingText: {
+    fontSize: 14,
+    color: '#A0AEC0',
+    fontStyle: 'italic',
   },
   priceContainer: {
     marginHorizontal: 24,
@@ -794,5 +1119,111 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
     letterSpacing: -0.96,
+  },
+  reviewItem: {
+    backgroundColor: '#F7FAFC',
+    padding: 15,
+    marginVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reviewsSummary: {
+    backgroundColor: '#F0F8FF',
+    padding: 15,
+    marginVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#B3D9FF',
+  },
+  reviewsSummaryTitle: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 16,
+    color: '#2D3748',
+    marginBottom: 8,
+  },
+  averageRatingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  averageRatingText: {
+    fontFamily: FontFamily.outfit_light,
+    fontWeight: FontWeight.light,
+    fontSize: 14,
+    color: '#4A5568',
+    marginRight: 8,
+  },
+  averageStars: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  averageRatingValue: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 14,
+    color: '#2D3748',
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reviewUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reviewUserName: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 14,
+    color: '#2D3748',
+    marginRight: 5,
+  },
+  verifiedBadge: {
+    fontSize: 12,
+    color: '#38A169',
+    backgroundColor: '#C6F6D5',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 10,
+  },
+  reviewStars: {
+    flexDirection: 'row',
+  },
+  reviewComment: {
+    fontFamily: FontFamily.outfit_light,
+    fontWeight: FontWeight.light,
+    fontSize: 14,
+    color: '#4A5568',
+    marginBottom: 8,
+    lineHeight: 18,
+  },
+  reviewFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reviewDate: {
+    fontFamily: FontFamily.outfit_light,
+    fontWeight: FontWeight.light,
+    fontSize: 12,
+    color: '#A0AEC0',
+  },
+  reviewOrderId: {
+    fontFamily: FontFamily.outfit_light,
+    fontWeight: FontWeight.light,
+    fontSize: 10,
+    color: '#CBD5E0',
+    backgroundColor: '#EDF2F7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  reviewDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginTop: 10,
   },
 });

@@ -2,14 +2,12 @@ import { Platform, Alert } from 'react-native';
 
 // Base URL untuk backend API
 const getBaseURL = () => {
-  const COMPUTER_IP = '192.168.1.4'; // Update sesuai IP komputer Anda
-
   if (Platform.OS === 'android') {
-    return `http://${COMPUTER_IP}:5000/api`;
-  } else if (Platform.OS === 'ios') {
-    return `http://${COMPUTER_IP}:5000/api`;
-  } else {
     return 'http://10.0.2.2:5000/api';
+  } else if (Platform.OS === 'ios') {
+    return 'http://localhost:5000/api';
+  } else {
+    return 'http://localhost:5000/api';
   }
 };
 
@@ -21,30 +19,64 @@ class PaymentStatusService {
     try {
       console.log('PaymentStatusService: Checking status for order:', orderId);
 
-      const response = await fetch(`${API_URL}/payment/status/${orderId}`, {
+      if (!orderId || orderId.trim() === '') {
+        throw new Error('Invalid order ID provided');
+      }
+
+      const response = await fetch(`${API_URL}/payment/midtrans/status/${orderId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
+        timeout: 10000, // 10 second timeout
       });
 
-      const data = await response.json();
-
-      console.log('PaymentStatusService: Status response:', data);
+      console.log('PaymentStatusService: Response status:', response.status);
+      console.log('PaymentStatusService: Response ok:', response.ok);
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to check payment status');
+        if (response.status === 404) {
+          throw new Error('Order not found');
+        } else if (response.status >= 500) {
+          throw new Error('Server error, please try again later');
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || errorData.message || `HTTP ${response.status}: Failed to check payment status`);
+        }
       }
 
-      return {
-        success: true,
-        data: data,
-      };
+      const data = await response.json();
+      console.log('PaymentStatusService: Status response:', data);
+      console.log('PaymentStatusService: Status response structure:', JSON.stringify(data, null, 2));
+
+      // Check if the response structure is correct
+      if (data.success && data.data) {
+        console.log('PaymentStatusService: Using nested data structure');
+        return {
+          success: true,
+          data: data.data, // Use nested data structure
+        };
+      } else {
+        console.log('PaymentStatusService: Using flat data structure');
+        return {
+          success: true,
+          data: data, // Use flat structure
+        };
+      }
     } catch (error) {
       console.error('PaymentStatusService: Error checking status:', error);
+      
+      // Handle network errors specifically
+      if (error.name === 'TypeError' && error.message.includes('Network request failed')) {
+        return {
+          success: false,
+          error: 'Network connection error. Please check your internet connection.',
+        };
+      }
+      
       return {
         success: false,
-        error: error.message,
+        error: error.message || 'Unknown error occurred while checking payment status',
       };
     }
   }
@@ -63,10 +95,20 @@ class PaymentStatusService {
       orderId,
     );
 
+    if (!orderId || orderId.trim() === '') {
+      console.error('PaymentStatusService: Invalid orderId for polling');
+      return {
+        success: false,
+        completed: false,
+        status: 'error',
+        error: 'Invalid order ID',
+      };
+    }
+
     const poll = async () => {
       attempts++;
       console.log(
-        `PaymentStatusService: Poll attempt ${attempts}/${maxAttempts}`,
+        `PaymentStatusService: Poll attempt ${attempts}/${maxAttempts} for order: ${orderId}`,
       );
 
       try {

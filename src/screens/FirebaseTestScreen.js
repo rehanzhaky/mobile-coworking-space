@@ -8,7 +8,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import firebaseService, { testFirebase } from '../config/firebase';
+import firebaseService, { testFirebase } from '../config/firebase_safe';
 
 export default function FirebaseTestScreen({ navigation }) {
   const [testResult, setTestResult] = useState(null);

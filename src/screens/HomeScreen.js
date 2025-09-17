@@ -15,6 +15,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 import ApiService from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 const SearchIcon = () => (
@@ -24,21 +25,44 @@ const SearchIcon = () => (
   />
 );
 
-// Dummy Notification Icon with Badge
-const NotificationIcon = () => {
+// Notification Icon with Badge
+const NotificationIcon = ({ unreadCount = 0 }) => {
+  console.log('🔔 NotificationIcon rendering with unreadCount:', unreadCount);
+
   try {
     return (
-      <Image
-        source={require('./assets/notification-icon.png')}
-        style={{ width: 20, height: 20, marginRight: 10 }}
-      />
+      <View style={styles.notificationIconContainer}>
+        <Image
+          source={require('./assets/notification-icon.png')}
+          style={{ width: 20, height: 20, marginRight: 10 }}
+        />
+        {/* Show badge only when there are unread notifications */}
+        {unreadCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {unreadCount > 99 ? '99+' : unreadCount.toString()}
+            </Text>
+          </View>
+        )}
+      </View>
     );
   } catch (error) {
+    console.log('❌ NotificationIcon error:', error);
     return (
-      <Image
-        source={require('./assets/pkbi-logo.png')}
-        style={{ width: 20, height: 20, marginRight: 10 }}
-      />
+      <View style={styles.notificationIconContainer}>
+        <Image
+          source={require('./assets/notification-icon.png')}
+          style={{ width: 20, height: 20, marginRight: 10 }}
+        />
+        {/* Show badge only when there are unread notifications */}
+        {unreadCount > 0 && (
+          <View style={styles.notificationBadge}>
+            <Text style={styles.notificationBadgeText}>
+              {unreadCount > 99 ? '99+' : unreadCount.toString()}
+            </Text>
+          </View>
+        )}
+      </View>
     );
   }
 };
@@ -131,19 +155,37 @@ export default function HomeScreen({ navigation }) {
   const [promotions, setPromotions] = useState([]);
   const [loadingPromotions, setLoadingPromotions] = useState(true);
   const [notificationTapCount, setNotificationTapCount] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('🔔 HomeScreen: unreadNotificationCount changed to:', unreadNotificationCount);
+  }, [unreadNotificationCount]);
 
   useEffect(() => {
     fetchItems();
     fetchPromotions();
+    fetchUnreadNotificationCount();
   }, []);
 
-  // Refresh promotions when screen is focused (untuk update real-time dari admin)
+  // Refresh promotions and notifications when screen is focused (untuk update real-time dari admin)
   useFocusEffect(
     React.useCallback(() => {
-      console.log('HomeScreen focused - refreshing promotions');
+      console.log('HomeScreen focused - refreshing promotions and notifications');
       fetchPromotions();
+
+      // Always refresh notification count when screen is focused
+      // This ensures badge updates when user returns from NotificationScreen
+      fetchUnreadNotificationCount();
     }, []),
   );
+
+  // Log search changes for debugging
+  useEffect(() => {
+    if (search.trim() !== '') {
+      console.log('HomeScreen: Searching for:', search);
+    }
+  }, [search]);
 
   const fetchItems = async () => {
     try {
@@ -162,6 +204,45 @@ export default function HomeScreen({ navigation }) {
       Alert.alert('Error', 'Gagal memuat data produk');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUnreadNotificationCount = async () => {
+    try {
+      console.log('🔔 HomeScreen: Fetching unread notification count...');
+      const token = await AsyncStorage.getItem('userToken');
+
+      console.log('🔍 Debug - Token exists:', !!token);
+      console.log('🔍 Debug - Token preview:', token ? token.substring(0, 20) + '...' : 'null');
+
+      if (!token) {
+        console.log('⚠️  HomeScreen: No user token found, setting count to 0');
+        setUnreadNotificationCount(0);
+        return;
+      }
+
+      console.log('🔑 HomeScreen: Token found, making API call...');
+
+      const result = await ApiService.get('/notifications?unreadOnly=true&limit=1', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      console.log('� Debug - API Result:', JSON.stringify(result, null, 2));
+
+      if (result.success && result.data) {
+        const unreadCount = result.data.unreadCount || 0;
+        console.log('✅ HomeScreen: Real unread notification count:', unreadCount);
+        setUnreadNotificationCount(unreadCount);
+
+        // Use real unread count from API
+      } else {
+        console.log('❌ HomeScreen: API returned error, setting count to 0');
+        setUnreadNotificationCount(0);
+      }
+    } catch (error) {
+      console.error('❌ HomeScreen: Error fetching notification count:', error);
+      console.log('🔧 HomeScreen: Setting count to 0 due to error');
+      setUnreadNotificationCount(0);
     }
   };
 
@@ -223,7 +304,14 @@ export default function HomeScreen({ navigation }) {
       );
       setNotificationTapCount(0);
     } else {
+      // Navigate to notification screen
       navigation?.navigate('NotificationScreen');
+
+      // Refresh notification count after a short delay (when user might have read notifications)
+      setTimeout(() => {
+        console.log('🔄 HomeScreen: Refreshing notification count after user opened notifications');
+        fetchUnreadNotificationCount();
+      }, 1000);
     }
   };
 
@@ -289,24 +377,32 @@ export default function HomeScreen({ navigation }) {
   // Combine database items with dummy data as fallback
   const allProducts = mappedItems.length > 0 ? mappedItems : products;
 
-  // Filter products based on selected category
-  const filteredProducts =
-    selectedCategory === 'all'
-      ? allProducts.slice(0, 6) // Show only first 6 items on home screen
-      : allProducts
-          .filter(p => {
-            if (selectedCategory === 'produk') {
-              return (
-                p.type === 'produk' || p.kategori?.toLowerCase() === 'produk'
-              );
-            } else if (selectedCategory === 'layanan') {
-              return (
-                p.type === 'layanan' || p.kategori?.toLowerCase() === 'layanan'
-              );
-            }
-            return true;
-          })
-          .slice(0, 6);
+  // Filter products based on selected category and search text
+  const filteredProducts = allProducts
+    .filter(p => {
+      // Filter by search text first
+      const searchText = search.toLowerCase().trim();
+      const matchesSearch = searchText === '' || 
+        p.title?.toLowerCase().includes(searchText) ||
+        p.subtitle?.toLowerCase().includes(searchText) ||
+        p.desc?.toLowerCase().includes(searchText) ||
+        p.nama?.toLowerCase().includes(searchText) ||
+        p.deskripsi?.toLowerCase().includes(searchText);
+      
+      if (!matchesSearch) return false;
+      
+      // Then filter by category
+      if (selectedCategory === 'all') return true;
+      
+      if (selectedCategory === 'produk') {
+        return p.type === 'produk' || p.kategori?.toLowerCase() === 'produk';
+      } else if (selectedCategory === 'layanan') {
+        return p.type === 'layanan' || p.kategori?.toLowerCase() === 'layanan';
+      }
+      
+      return true;
+    })
+    .slice(0, search.trim() !== '' ? 20 : 6); // Show more results when searching
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -323,7 +419,7 @@ export default function HomeScreen({ navigation }) {
             style={styles.iconNotif}
             onPress={handleNotificationTap}
           >
-            <NotificationIcon />
+            <NotificationIcon unreadCount={unreadNotificationCount} />
           </TouchableOpacity>
         </View>
 
@@ -331,11 +427,25 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.searchBar}>
           <TextInput
             style={styles.searchInput}
-            placeholder="Cari produk yang anda butuhkan..."
-            placeholderTextColor="#112D4E"
+            placeholder="Cari aplikasi, layanan, atau produk..."
+            placeholderTextColor="#999"
             value={search}
             onChangeText={setSearch}
+            returnKeyType="search"
+            onSubmitEditing={() => {
+              if (search.trim()) {
+                console.log('Searching for:', search);
+              }
+            }}
           />
+          {search.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearch('')}
+              style={styles.clearButton}
+            >
+              <Text style={styles.clearButtonText}>✕</Text>
+            </TouchableOpacity>
+          )}
           <SearchIcon />
         </View>
 
@@ -433,7 +543,14 @@ export default function HomeScreen({ navigation }) {
 
         {/* Katalog */}
         <View style={styles.catalogHeader}>
-          <Text style={styles.catalogTitle}>Katalog</Text>
+          <View>
+            <Text style={styles.catalogTitle}>Katalog</Text>
+            {search.trim() !== '' && (
+              <Text style={styles.searchResultText}>
+                {filteredProducts.length} hasil untuk "{search}"
+              </Text>
+            )}
+          </View>
           <TouchableOpacity
             onPress={() => navigation.navigate('CatalogScreen')}
           >
@@ -494,7 +611,12 @@ export default function HomeScreen({ navigation }) {
                 paddingVertical: 20,
               }}
             >
-              <Text style={{ color: '#666' }}>Tidak ada produk tersedia</Text>
+              <Text style={{ color: '#666', textAlign: 'center' }}>
+                {search.trim() !== '' 
+                  ? `Tidak ada hasil untuk "${search}"\nCoba kata kunci lain atau lihat semua produk.`
+                  : 'Tidak ada produk tersedia'
+                }
+              </Text>
             </View>
           ) : (
             filteredProducts.map(item => (
@@ -646,6 +768,30 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginRight: 4,
   },
+  notificationIconContainer: {
+    position: 'relative',
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: -6,
+    right: 7,
+    backgroundColor: '#FF3E43',
+    borderRadius: 500,
+    width: 14,
+    height: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  notificationBadgeText: {
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    color: '#FFFFFF',
+    fontSize: 8,
+    textAlign: 'center',
+    lineHeight: 10,
+  },
   searchBar: {
     backgroundColor: '#fff',
     flexDirection: 'row',
@@ -663,6 +809,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#112D4E',
     paddingVertical: 3,
+  },
+  clearButton: {
+    marginLeft: 8,
+    marginRight: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ccc',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   promoCard: {
     width: 313,
@@ -697,6 +858,13 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     fontSize: 20,
     color: '#000000',
+  },
+  searchResultText: {
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   seeAll: {
     fontFamily: FontFamily.outfit_medium,

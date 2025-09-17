@@ -13,6 +13,7 @@ import {
   Linking,
   AppState,
 } from 'react-native';
+import { FontWeight, FontFamily } from '../styles/typography';
 import ApiService from '../services/api';
 import paymentService from '../services/paymentService';
 import PaymentStatusService from '../services/paymentStatusService';
@@ -24,7 +25,6 @@ export default function CheckoutDetailScreen({ navigation, route }) {
   // State for payment processing
   const [loading, setLoading] = useState(false);
   const [orderData, setOrderData] = useState(null);
-  const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
   const currentOrderId = useRef(null);
 
   console.log('CheckoutDetailScreen received:', {
@@ -34,90 +34,8 @@ export default function CheckoutDetailScreen({ navigation, route }) {
     paymentData,
   });
 
-  // AppState listener untuk detect ketika user kembali ke app setelah payment
-  useEffect(() => {
-    const handleAppStateChange = nextAppState => {
-      console.log('AppState changed to:', nextAppState);
-
-      if (
-        nextAppState === 'active' &&
-        isPaymentInProgress &&
-        currentOrderId.current
-      ) {
-        console.log(
-          'App became active, checking payment status for order:',
-          currentOrderId.current,
-        );
-
-        // Delay check untuk memastikan webhook sudah diproses
-        setTimeout(() => {
-          checkPaymentStatus(currentOrderId.current);
-        }, 2000); // Wait 2 seconds for webhook processing
-      }
-    };
-
-    const subscription = AppState.addEventListener(
-      'change',
-      handleAppStateChange,
-    );
-
-    return () => {
-      subscription?.remove();
-    };
-  }, [isPaymentInProgress, navigation, customerData, product]);
-
-  // Check payment status
-  const checkPaymentStatus = async orderId => {
-    try {
-      const result = await ApiService.checkMidtransStatus(orderId);
-
-      if (result.success) {
-        const { transaction_status, payment_type } = result.data;
-
-        if (
-          transaction_status === 'capture' ||
-          transaction_status === 'settlement'
-        ) {
-          // Payment successful
-          Alert.alert(
-            'Pembayaran Berhasil!',
-            `Pembayaran dengan ${payment_type} telah berhasil.`,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  setIsPaymentInProgress(false);
-                  currentOrderId.current = null;
-                  // Navigate to success screen
-                  navigation.navigate('PaymentSuccessScreen', {
-                    orderData: { orderId, transaction_status, payment_type },
-                    customerData,
-                    product,
-                  });
-                },
-              },
-            ],
-          );
-        } else if (transaction_status === 'pending') {
-          // Payment still pending
-          Alert.alert(
-            'Pembayaran Pending',
-            'Pembayaran masih dalam proses. Silakan tunggu atau cek status nanti.',
-          );
-        } else {
-          // Payment failed or cancelled
-          Alert.alert(
-            'Pembayaran Gagal',
-            `Status pembayaran: ${transaction_status}. Silakan coba lagi.`,
-          );
-          setIsPaymentInProgress(false);
-          currentOrderId.current = null;
-        }
-      }
-    } catch (error) {
-      console.error('Error checking payment status:', error);
-    }
-  };
+  // Payment handlers are now in WebView
+  // No need for AppState monitoring
 
   // Use received data or fallback to default
   const buyer = customerData
@@ -142,12 +60,23 @@ export default function CheckoutDetailScreen({ navigation, route }) {
         price: paymentService.formatCurrency(
           parseInt(product.harga || product.price || 0),
         ),
+        category: product.kategori || 'Produk',
       }
     : {
         image: require('./assets/absensi-staff.png'),
         name: 'Aplikasi Absensi',
         price: 'Rp 2.000.000',
+        category: 'Produk',
       };
+
+  // Function to get category display text
+  const getCategoryDisplay = (category) => {
+    if (!category) return 'Produk';
+    const lowerCategory = category.toLowerCase();
+    if (lowerCategory === 'produk') return 'Produk';
+    if (lowerCategory === 'layanan' || lowerCategory === 'service') return 'Layanan';
+    return category; // Return original if not recognized
+  };
 
   // Use received payment data or fallback to default
   const payment = paymentData
@@ -162,21 +91,7 @@ export default function CheckoutDetailScreen({ navigation, route }) {
         total: 'Rp 2.000.000',
       };
 
-  // Test API connection
-  const testConnection = async () => {
-    try {
-      console.log('Testing API connection...');
-      const response = await ApiService.testConnection();
-      if (response.success) {
-        Alert.alert('Connection Test', 'Koneksi berhasil!');
-      } else {
-        Alert.alert('Connection Test', 'Koneksi gagal!');
-      }
-    } catch (error) {
-      console.error('Connection test failed:', error);
-      Alert.alert('Connection Test', `Failed: ${error.message}`);
-    }
-  };
+  // Handle payment processing
 
   // Handle payment process
   const handlePayment = async () => {
@@ -192,14 +107,8 @@ export default function CheckoutDetailScreen({ navigation, route }) {
         return;
       }
 
-      // Generate unique order ID
-      const orderId = `ORDER-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-
-      // Prepare order data for Midtrans
+      // Prepare order data for Midtrans (Order ID will be generated by backend)
       const orderData = {
-        orderId: orderId,
         grossAmount: parseInt(product.harga || product.price || 0),
         customerDetails: {
           firstName: customerData.firstName,
@@ -213,6 +122,7 @@ export default function CheckoutDetailScreen({ navigation, route }) {
             price: parseInt(product.harga || product.price || 0),
             quantity: 1,
             name: product.nama || product.title || 'Product',
+            category: product.kategori || product.category || 'Produk', // Add category for Order ID generation
           },
         ],
         paymentType: paymentData.midtransType, // ewallet, credit_card, bank_transfer
@@ -225,13 +135,24 @@ export default function CheckoutDetailScreen({ navigation, route }) {
 
       // Create transaction with Midtrans
       const result = await ApiService.createMidtransTransaction(orderData);
+      
+      console.log('📥 Midtrans API result:', result);
+      console.log('🔍 Result structure:', {
+        success: result.success,
+        data: result.data,
+        message: result.message,
+        error: result.error
+      });
 
       if (result.success && result.data) {
         console.log('Midtrans transaction created:', result.data);
 
-        // Store current order ID for status checking
-        currentOrderId.current = orderId;
-        setIsPaymentInProgress(true);
+        // Get the structured Order ID from backend response
+        const backendOrderId = result.data.order_id;
+        console.log('📦 Using backend Order ID:', backendOrderId);
+
+        // Store the backend Order ID for status checking
+        currentOrderId.current = backendOrderId;
 
         // Get payment URL based on payment type
         let paymentUrl = null;
@@ -245,17 +166,23 @@ export default function CheckoutDetailScreen({ navigation, route }) {
         }
 
         if (paymentUrl) {
-          Alert.alert(
-            'Pembayaran Midtrans',
-            `Anda akan diarahkan ke halaman pembayaran ${paymentData.label}.\n\nSetelah pembayaran selesai, kembali ke aplikasi untuk melihat status.`,
-            [
-              { text: 'Batal', style: 'cancel' },
-              {
-                text: 'Lanjut ke Pembayaran',
-                onPress: () => openPaymentPage(paymentUrl, orderData),
-              },
-            ],
-          );
+          // Navigate to WebView instead of external browser
+          console.log('Navigating to MidtransWebViewScreen with:', {
+            paymentUrl,
+            orderData,
+            orderId: backendOrderId
+          });
+          
+          navigation.navigate('MidtransWebViewScreen', {
+            paymentUrl: paymentUrl,
+            orderData: {
+              ...orderData,
+              orderId: backendOrderId // Use the structured Order ID from backend
+            },
+            orderId: backendOrderId, // Pass the structured Order ID
+            customerData: customerData,
+            product: product
+          });
         } else {
           throw new Error(
             'Tidak ada URL pembayaran yang diterima dari Midtrans',
@@ -275,7 +202,99 @@ export default function CheckoutDetailScreen({ navigation, route }) {
     }
   };
 
-  // Open payment page in external browser
+  // Check payment status using PaymentStatusService
+  const checkPaymentStatus = async (orderId) => {
+    if (!orderId) {
+      Alert.alert('Error', 'Order ID tidak tersedia untuk pengecekan status.');
+      return;
+    }
+
+    try {
+      console.log('🔍 Checking payment status for orderId:', orderId);
+      
+      // Show loading indicator
+      setLoading(true);
+
+      // Use PaymentStatusService to check status
+      const result = await PaymentStatusService.checkPaymentStatus(orderId);
+
+      console.log('💳 Payment status result:', result);
+
+      if (result.success) {
+        const { transaction_status, payment_type } = result.data;
+
+        if (transaction_status === 'capture' || transaction_status === 'settlement') {
+          // Payment successful
+          Alert.alert(
+            'Pembayaran Berhasil!',
+            `Pembayaran dengan ${payment_type} telah berhasil.`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  setLoading(false);
+                  currentOrderId.current = null;
+                  // Navigate to success screen
+                  navigation.navigate('PaymentSuccessScreen', {
+                    orderData: { orderId, transaction_status, payment_type },
+                    customerData,
+                    product,
+                  });
+                },
+              },
+            ],
+          );
+        } else if (transaction_status === 'pending') {
+          // Payment still pending
+          Alert.alert(
+            'Pembayaran Pending',
+            'Pembayaran masih dalam proses. Silakan tunggu atau cek status nanti.',
+            [{ text: 'OK', onPress: () => setLoading(false) }]
+          );
+        } else if (transaction_status === 'deny' || transaction_status === 'cancel' || transaction_status === 'expire') {
+          // Payment failed or cancelled
+          Alert.alert(
+            'Pembayaran Gagal',
+            `Status pembayaran: ${transaction_status}. Silakan coba lagi.`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  setLoading(false);
+                  currentOrderId.current = null;
+                },
+              },
+            ]
+          );
+        } else {
+          // Unknown status
+          Alert.alert(
+            'Status Tidak Dikenal',
+            `Status pembayaran: ${transaction_status}`,
+            [{ text: 'OK', onPress: () => setLoading(false) }]
+          );
+        }
+      } else {
+        // Failed to check status
+        Alert.alert(
+          'Error',
+          result.message || 'Gagal mengecek status pembayaran.',
+          [{ text: 'OK', onPress: () => setLoading(false) }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Error checking payment status:', error);
+      Alert.alert(
+        'Error',
+        `Gagal mengecek status pembayaran: ${error.message}`,
+        [{ text: 'OK', onPress: () => setLoading(false) }]
+      );
+    }
+  };
+
+  // NOTE: This function is now replaced by MidtransWebViewScreen navigation
+  // Open payment page in external browser (DEPRECATED)
+  /*
   const openPaymentPage = async (paymentUrl, orderData) => {
     try {
       console.log('Opening payment page:', paymentUrl);
@@ -339,6 +358,7 @@ export default function CheckoutDetailScreen({ navigation, route }) {
       );
     }
   };
+  */
 
   const BackIcon = () => (
     <Image
@@ -359,7 +379,7 @@ export default function CheckoutDetailScreen({ navigation, route }) {
         </View>
 
         {/* Info Pembeli */}
-        <Text style={styles.sectionTitle}>Info Pembeli</Text>
+        <Text style={styles.sectionTitle}>Detail Pembeli</Text>
         <View style={styles.buyerInfo}>
           <Text style={styles.buyerName}>{buyer.name}</Text>
           <Text style={styles.buyerDetail}>{buyer.community}</Text>
@@ -371,24 +391,33 @@ export default function CheckoutDetailScreen({ navigation, route }) {
         <View style={styles.orderInfo}>
           <Image source={order.image} style={styles.orderImage} />
           <View style={styles.orderDetails}>
-            <Text style={styles.orderName}>{order.name}</Text>
+            <Text style={styles.orderCategory}>{getCategoryDisplay(order.category)}</Text>
+            <Text style={styles.orderName}>{order.name}</Text> 
             <Text style={styles.orderPrice}>{order.price}</Text>
+          </View>
+        </View>
+
+        {/* Garis Pembatas Putus-putus */}
+        <View style={styles.dividerContainer}>
+          <View style={styles.dottedLine}>
+            {Array.from({ length: 20 }).map((_, index) => (
+              <View key={index} style={styles.dot} />
+            ))}
           </View>
         </View>
 
         {/* Rincian Pembayaran */}
         <Text style={styles.sectionTitle}>Rincian Pembayaran</Text>
         <View style={styles.paymentInfo}>
-          <Text style={styles.paymentLabel}>Metode Pembayaran</Text>
-          <Text style={styles.paymentValue}>{payment.method}</Text>
-          <Text style={styles.paymentLabel}>Total Harga</Text>
-          <Text style={styles.paymentValue}>{payment.total}</Text>
+          <View style={styles.paymentRow}>
+            <Text style={styles.paymentLabel}>Metode Pembayaran</Text>
+            <Text style={styles.paymentValue}>{payment.method}</Text>
+          </View>
+          <View style={styles.paymentRow}>
+            <Text style={styles.paymentLabel}>Total Harga</Text>
+            <Text style={styles.paymentValue}>{payment.total}</Text>
+          </View>
         </View>
-
-        {/* Test Connection Button */}
-        <TouchableOpacity style={styles.testBtn} onPress={testConnection}>
-          <Text style={styles.testBtnText}>Test Connection</Text>
-        </TouchableOpacity>
 
         {/* Tombol Bayar */}
         <TouchableOpacity
@@ -402,16 +431,6 @@ export default function CheckoutDetailScreen({ navigation, route }) {
             <Text style={styles.payBtnText}>Bayar</Text>
           )}
         </TouchableOpacity>
-
-        {/* Status Check Button (only show if payment in progress) */}
-        {isPaymentInProgress && currentOrderId.current && (
-          <TouchableOpacity
-            style={styles.statusBtn}
-            onPress={() => checkPaymentStatus(currentOrderId.current)}
-          >
-            <Text style={styles.statusBtnText}>Cek Status Pembayaran</Text>
-          </TouchableOpacity>
-        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -422,125 +441,162 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 34,
-    marginBottom: 24,
     paddingHorizontal: 18,
   },
   title: {
+    fontFamily: FontFamily.outfit_semibold,
+    fontWeight: FontWeight.semibold,
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1976D2',
-    marginLeft: 8,
+    color: '#0070D8',
+    marginLeft: 75,
   },
   sectionTitle: {
+    fontFamily: FontFamily.semibold,
+    fontWeight: FontWeight.semibold,
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#222',
+    color: '#000',
     marginHorizontal: 18,
     marginTop: 24,
     marginBottom: 12,
+    letterSpacing: -0.96,
+    lineHeight: 22,
   },
   buyerInfo: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#0070D8',
     marginHorizontal: 18,
-    padding: 16,
-    borderRadius: 8,
+    padding: 11,
+    borderRadius: 12,
   },
   buyerName: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#222',
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
+    color: '#fff',
     marginBottom: 4,
+    letterSpacing: -0.96,
+    lineHeight: 22,
   },
   buyerDetail: {
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
     fontSize: 14,
-    color: '#666',
+    color: '#fff',
     marginBottom: 2,
+    letterSpacing: -0.96,
+    lineHeight: 22,
   },
   orderInfo: {
     flexDirection: 'row',
+    paddingVertical: 10,
     marginHorizontal: 18,
     padding: 16,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+    backgroundColor: '#0070D8',
+    borderRadius: 12,
     alignItems: 'center',
   },
   orderImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: 127,
+    height: 129,
+    borderRadius: 16,
     marginRight: 16,
   },
   orderDetails: {
     flex: 1,
+    padding: 20
+  },
+  orderCategory: {
+    fontFamily: FontFamily.medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 16,
+    color: '#fff',
+    marginBottom: 4,
+    letterSpacing: -0.5,
+    lineHeight: 16,
   },
   orderName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 4,
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 12,
+    color: '#fff',
+    marginBottom: 50,
+    letterSpacing: -0.96,
+    lineHeight: 22,
   },
   orderPrice: {
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
     fontSize: 16,
-    color: '#1976D2',
-    fontWeight: 'bold',
+    color: '#fff',
   },
   paymentInfo: {
-    marginHorizontal: 18,
     padding: 16,
-    backgroundColor: '#f5f5f5',
     borderRadius: 8,
   },
-  paymentLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  paymentValue: {
-    fontSize: 16,
-    color: '#222',
-    fontWeight: 'bold',
+  paymentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  testBtn: {
-    backgroundColor: '#666',
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginTop: 16,
-    marginHorizontal: 18,
-  },
-  testBtnText: {
-    color: '#fff',
+  paymentLabel: {
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
     fontSize: 16,
-    fontWeight: 'bold',
+    color: '#000',
+    flex: 1,
+    letterSpacing: -0.96,
+    lineHeight: 22,
+  },
+  paymentValue: {
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 16,
+    color: '#000',
+    textAlign: 'right',
+    flex: 1,
+    letterSpacing: -0.96,
+    lineHeight: 22,
   },
   payBtn: {
-    backgroundColor: '#0072DF',
+    backgroundColor: '#0070D8',
     borderRadius: 32,
     alignItems: 'center',
     paddingVertical: 15,
     marginTop: 24,
-    marginHorizontal: 18,
+    marginHorizontal: 120,
   },
   payBtnDisabled: {
     backgroundColor: '#ccc',
   },
   payBtnText: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  statusBtn: {
-    backgroundColor: '#f39c12',
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-    marginTop: 16,
-    marginHorizontal: 18,
-  },
-  statusBtnText: {
+    fontFamily: FontFamily.medium,
+    fontWeight: FontWeight.medium,
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    letterSpacing: -0.96,
+    lineHeight: 22,
+  },
+  
+  // Styling untuk garis putus-putus
+  dividerContainer: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  dottedLine: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+  },
+  dot: {
+    width: 15,
+    height: 2,
+    borderRadius: 4, // Membuat bentuk bulat (round)
+    backgroundColor: '#0070D8',
+    borderWidth: 1,
+    borderColor: '#0070D8',
+    borderStyle: 'solid',
   },
 });

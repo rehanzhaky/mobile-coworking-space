@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mobile Chat Simulator</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>📱 Mobile App Chat Simulator</h1>
+    <div id="status">Connecting...</div>
+    <div>
+        <input type="text" id="messageInput" placeholder="Type message..." value="Halo admin, saya sudah bayar!"/>
+        <button onclick="sendMessage()">Send as User</button>
+    </div>
+    <div id="messages"></div>
+    
+    <script>
+        const socket = io('http://localhost:5000');
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        socket.on('connect', () => {
+            statusDiv.textContent = 'Connected as User ID: 2';
+            console.log('Connected to server');
+            
+            // Join as user
+            socket.emit('join_room', {
+                userId: 2,
+                adminId: 1,
+                userType: 'user'
+            });
+        });
+        
+        socket.on('room_joined', (data) => {
+            console.log('Room joined:', data);
+            messagesDiv.innerHTML += '<div><strong>✅ Joined room: ' + data.roomId + '</strong></div>';
+        });
+        
+        socket.on('receive_message', (data) => {
+            console.log('Received message from admin:', data);
+            messagesDiv.innerHTML += '<div>📩 <strong>Admin:</strong> ' + data.message + ' <em>(' + new Date(data.createdAt).toLocaleTimeString() + ')</em></div>';
+        });
+        
+        socket.on('conversation_started', (data) => {
+            console.log('Conversation started:', data);
+            messagesDiv.innerHTML += '<div><strong>🎉 ' + data.message + '</strong></div>';
+        });
+        
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                socket.emit('send_message', {
+                    senderId: 2,
+                    receiverId: 1,
+                    message: message,
+                    userType: 'user'
+                });
+                
+                messagesDiv.innerHTML += '<div>📤 <strong>Me:</strong> ' + message + '</div>';
+                input.value = '';
+            }
+        }
+        
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

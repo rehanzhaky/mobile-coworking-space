@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Dimensions,
   SafeAreaView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 import ApiService from '../services/api';
@@ -104,26 +106,92 @@ const getTransformStyle = transform => {
 };
 
 export default function SplashScreen({ navigation }) {
+  const circleScale = new Animated.Value(1);
+  const circleOpacity = new Animated.Value(1);
+  const contentOpacity = new Animated.Value(0);
+  
+  // Create animated values for each splash asset movement
+  const assetAnimations = splashAssets.reduce((acc, asset) => {
+    acc[asset.id] = {
+      translateX: new Animated.Value(asset.transform.translateX * 2), // Start from further position
+      translateY: new Animated.Value(asset.transform.translateY * 2), // Start from further position
+    };
+    return acc;
+  }, {});
+
   useEffect(() => {
+    // Start circle animation
+    const startCircleAnimation = () => {
+      // Create asset movement animations
+      const assetMovements = splashAssets.map(asset => 
+        Animated.parallel([
+          Animated.timing(assetAnimations[asset.id].translateX, {
+            toValue: asset.transform.translateX, // Move to final position
+            duration: 1000,
+            delay: 600, // Start after circle is halfway scaled
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.timing(assetAnimations[asset.id].translateY, {
+            toValue: asset.transform.translateY, // Move to final position
+            duration: 1000,
+            delay: 600, // Start after circle is halfway scaled
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      // Animate circle scale down and content fade in simultaneously
+      Animated.parallel([
+        // Scale down with smooth effect (no bounce)
+        Animated.timing(circleScale, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.out(Easing.cubic), // Smooth effect, no bounce
+          useNativeDriver: true,
+        }),
+        // Fade out circle as it scales down
+        Animated.timing(circleOpacity, {
+          toValue: 0,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        // Fade in content simultaneously
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 800,
+          delay: 400, // Start showing content when circle is halfway gone
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        // Move all assets to their final positions
+        ...assetMovements,
+      ]).start();
+    };
+
+    // Start the circle animation immediately
+    startCircleAnimation();
+
     const checkAuthAndNavigate = async () => {
       try {
         // Check if user is already logged in
         const isLoggedIn = await ApiService.isLoggedIn();
 
-        // Wait for splash duration
+        // Wait for animation + content display duration
         setTimeout(() => {
           if (isLoggedIn) {
             navigation.replace('Home');
           } else {
             navigation.replace('Onboarding');
           }
-        }, 3000); // Reduced to 3 seconds
+        }, 3500); // Total duration: 1.2s animation + 2.3s content display
       } catch (error) {
         console.error('Auth check error:', error);
         // If error, go to onboarding
         setTimeout(() => {
           navigation.replace('Onboarding');
-        }, 3000);
+        }, 3500);
       }
     };
 
@@ -133,24 +201,51 @@ export default function SplashScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Decorative images, using configurable assets with transform */}
-        {splashAssets.map(asset => (
-          <Image
-            key={asset.id}
-            source={asset.source}
-            style={[
-              styles.item,
-              getResponsivePosition(asset.position, width, height),
-              scaleSize(asset.size, 1), // Scale factor dapat diubah
-              getTransformStyle(asset.transform), // Transform properties
-            ]}
-          />
-        ))}
+        {/* Animated Circle */}
+        <Animated.View
+          style={[
+            styles.animatedCircle,
+            {
+              transform: [{ scale: circleScale }],
+              opacity: circleOpacity,
+            },
+          ]}
+        />
 
-        <View style={styles.logoContainer}>
-          <Text style={styles.splashText1}>Virtual</Text>
-          <Text style={styles.splashText2}>Co-Working Space</Text>
-        </View>
+        {/* Content - always rendered but controlled by opacity */}
+        <Animated.View
+          style={[
+            styles.contentContainer,
+            {
+              opacity: contentOpacity,
+            },
+          ]}
+        >
+          {/* Decorative images, using configurable assets with animated transform */}
+          {splashAssets.map(asset => (
+            <Animated.Image
+              key={asset.id}
+              source={asset.source}
+              style={[
+                styles.item,
+                getResponsivePosition(asset.position, width, height),
+                scaleSize(asset.size, 1), // Scale factor dapat diubah
+                {
+                  transform: [
+                    { translateX: assetAnimations[asset.id].translateX },
+                    { translateY: assetAnimations[asset.id].translateY },
+                    { rotate: asset.transform.rotate },
+                  ],
+                },
+              ]}
+            />
+          ))}
+
+          <View style={styles.logoContainer}>
+            <Text style={styles.splashText1}>Virtual</Text>
+            <Text style={styles.splashText2}>Co-Working Space</Text>
+          </View>
+        </Animated.View>
       </View>
     </SafeAreaView>
   );
@@ -164,6 +259,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  animatedCircle: {
+    position: 'absolute',
+    width: 900,
+    height: 900,
+    borderRadius: 450,
+    backgroundColor: '#0070D8',
+    top: '50%',
+    left: '50%',
+    marginTop: -450,
+    marginLeft: -450,
+  },
+  contentContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },

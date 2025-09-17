@@ -805,7 +805,7 @@ export default function ProductOrderDetailFormScreen({ navigation, route }) {
               {province || 'Pilih provinsi'}
             </Text>
             <Text
-              style={{ position: 'absolute', right: 18, fontSize: 18, top: 14 }}
+              style={{ position: 'absolute', right: 18, fontSize: 18, top: 6 }}
             >
               <ArrowDown />
             </Text>
@@ -828,7 +828,7 @@ export default function ProductOrderDetailFormScreen({ navigation, route }) {
               {city || 'Pilih kota/kabupaten'}
             </Text>
             <Text
-              style={{ position: 'absolute', right: 18, fontSize: 18, top: 14 }}
+              style={{ position: 'absolute', right: 18, fontSize: 18, top: 6 }}
             >
               <ArrowDown />
             </Text>
@@ -982,7 +982,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.outfit_regular,
     fontWeight: FontWeight.regular,
     fontSize: 14,
-    color: '#0000',
+    color: '#000000',
     marginTop: 18,
     marginBottom: 7,
   },

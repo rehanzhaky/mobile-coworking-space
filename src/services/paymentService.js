@@ -1,6 +1,10 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 
-const API_URL = 'http://192.168.1.4:5000'; // Real device - computer IP address
+// Use emulator-friendly URLs
+const API_URL = Platform.OS === 'android' 
+  ? 'http://10.0.2.2:5000' 
+  : 'http://localhost:5000';
 
 class PaymentService {
   // Create transaction and get Snap token

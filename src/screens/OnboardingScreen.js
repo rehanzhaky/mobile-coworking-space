@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   Dimensions,
   SafeAreaView,
+  Animated,
+  Easing,
+  Platform,
 } from 'react-native';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 import { useFocusEffect } from '@react-navigation/native';
@@ -17,9 +20,54 @@ const { width, height } = Dimensions.get('window');
 export default function OnboardingScreen({ navigation }) {
   const [promoImages, setPromoImages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  // API URL - adjust according to your backend
-  const apiUrl = 'http://192.168.1.8:5000'; // Replace with your actual API URL
+  // Animation values
+  const logoTranslateX = new Animated.Value(0);
+  const backgroundScaleX = new Animated.Value(1); // Start with scale 1
+  const backgroundOpacity = new Animated.Value(0);
+
+  // API URL - use emulator-friendly URLs
+  const apiUrl = Platform.OS === 'android' 
+    ? 'http://10.0.2.2:5000' 
+    : 'http://localhost:5000';
+
+  // Animation handler
+  const handleStartPress = () => {
+    if (isAnimating) return; // Prevent multiple taps
+    
+    setIsAnimating(true);
+    
+    // Start animations in parallel
+    Animated.parallel([
+      // Move logo to the left
+      Animated.timing(logoTranslateX, {
+        toValue: -width / 2 - 50, // Move to left side of screen
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      // Scale background horizontally
+      Animated.timing(backgroundScaleX, {
+        toValue: width / 50, // Scale to cover screen width (width/initial_width)
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true, // ScaleX works with native driver
+      }),
+      // Show background
+      Animated.timing(backgroundOpacity, {
+        toValue: 1,
+        duration: 200,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Navigate after animation completes
+      setTimeout(() => {
+        navigation.replace('Login');
+      }, 100);
+    });
+  };
 
   // Fetch promo data on component mount
   useEffect(() => {
@@ -197,14 +245,32 @@ export default function OnboardingScreen({ navigation }) {
         {/* Start Button */}
         <TouchableOpacity
           style={styles.startBtn}
-          onPress={() => {
-            navigation.replace('Login');
-          }}
+          onPress={handleStartPress}
+          disabled={isAnimating}
         >
-          <Text style={styles.startText}>Mulai</Text>
-          <Image
+          {/* Animated Background */}
+          <Animated.View
+            style={[
+              styles.animatedBackground,
+              {
+                transform: [{ scaleX: backgroundScaleX }],
+                opacity: backgroundOpacity,
+              },
+            ]}
+          />
+          
+          <Text style={[styles.startText, isAnimating && { opacity: 0.7 }]}>
+            Mulai
+          </Text>
+          
+          <Animated.Image
             source={require('./assets/pkbi-logo.png')}
-            style={styles.startLogo}
+            style={[
+              styles.startLogo,
+              {
+                transform: [{ translateX: logoTranslateX }],
+              },
+            ]}
           />
         </TouchableOpacity>
       </View>
@@ -288,6 +354,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     zIndex: 5,
     transform: [{ translateY: 150 }, { translateX: 0 }],
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  animatedBackground: {
+    position: 'absolute',
+    width: 50, // Fixed width that will be scaled
+    height: 50,
+    backgroundColor: '#0070D8',
+    borderRadius: 25,
+    zIndex: -1,
+    left: -6,
+    top: -6,
   },
   startText: {
     color: '#000000',
@@ -296,10 +374,12 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
     fontSize: 15,
     lineHeight: 24,
+    zIndex: 2,
   },
   startLogo: {
     width: 38,
     height: 38,
     resizeMode: 'contain',
+    zIndex: 2,
   },
 });

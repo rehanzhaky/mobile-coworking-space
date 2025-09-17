@@ -412,41 +412,7 @@ export default function CatalogScreen({ navigation }) {
                   {/* Conditional Product Details */}
                   {expanded === item.id && (
                     <>
-                      {/* Product Title dan Rating */}
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: 6,
-                        }}
-                      >
-                        <Text style={styles.productTitle}>{item.nama}</Text>
-                        <View style={{ flexDirection: 'row' }}>
-                          {[1, 2, 3, 4, 5].map(i => (
-                            <View
-                              key={i}
-                              style={{
-                                marginRight: i < 5 ? 2 : 0,
-                              }}
-                            >
-                              <Image
-                                source={
-                                  i <= (item.rating || 5)
-                                    ? require('./assets/Star-Yellow.png')
-                                    : require('./assets/Star.png')
-                                }
-                                style={{
-                                  width: 11.52,
-                                  height: 11.52,
-                                }}
-                              />
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-
-                      {/* Product Subtitle dan Price */}
+                      {/* Product Info Layout: Left (Title + Subtitle) and Right (Rating + Price) */}
                       <View
                         style={{
                           flexDirection: 'row',
@@ -455,31 +421,51 @@ export default function CatalogScreen({ navigation }) {
                           marginBottom: 10,
                         }}
                       >
-                        {/* Deskripsi dengan word wrap */}
-                        <View style={{ flex: 1, paddingRight: 8 }}>
-                          <Text
-                            style={[
-                              styles.productSubtitle,
-                              {
-                                lineHeight: 16,
-                                flexWrap: 'wrap',
-                              },
-                            ]}
-                            numberOfLines={2}
-                            ellipsizeMode="tail"
-                          >
-                            {formatDisplayText(item.deskripsi) ||
-                              'Tidak ada deskripsi'}
-                          </Text>
+                        {/* Left Side: Product Title and Subtitle */}
+                        <View style={{ flex: 1, paddingRight: 12 }}>
+                          {/* Product Title */}
+                          <Text style={styles.productTitle}>{item.nama}</Text>
+                          
+                          {/* Product Subtitle */}
+                          {item.subtitle && (
+                            <Text style={styles.productSubtitleText}>
+                              {item.subtitle}
+                            </Text>
+                          )}
                         </View>
 
-                        {/* Price container */}
-                        <View
-                          style={{
-                            alignItems: 'flex-end',
-                            minWidth: 80,
-                          }}
-                        >
+                        {/* Right Side: Rating and Price */}
+                        <View style={{ alignItems: 'flex-end' }}>
+                          {/* Rating */}
+                          <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                            {[1, 2, 3, 4, 5].map(i => (
+                              <View
+                                key={i}
+                                style={{
+                                  marginRight: i < 5 ? 2 : 0,
+                                }}
+                              >
+                                <Image
+                                  source={
+                                    i <= (item.rating || 5)
+                                      ? require('./assets/Star-Yellow.png')
+                                      : require('./assets/Star.png')
+                                  }
+                                  style={{
+                                    width: 11.52,
+                                    height: 11.52,
+                                  }}
+                                />
+                              </View>
+                            ))}
+                          </View>
+
+                          {/* Price */}
+                          <View
+                            style={{
+                              alignItems: 'flex-end',
+                            }}
+                          >
                           {(() => {
                             const priceInfo = getPriceDisplay(item);
 
@@ -524,6 +510,7 @@ export default function CatalogScreen({ navigation }) {
                               );
                             }
                           })()}
+                          </View>
                         </View>
                       </View>
 
@@ -803,6 +790,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.outfit_medium,
     fontWeight: FontWeight.medium,
     fontSize: 16,
+    color: '#000000',
+  },
+  productSubtitleText: {
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 12,
     color: '#000000',
   },
   productSubtitle: {

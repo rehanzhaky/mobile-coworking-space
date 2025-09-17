@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/api';
-import FirebaseService from '../config/firebase';
+import FirebaseService from '../config/firebase_safe';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 
 const BackIcon = () => (
@@ -24,6 +24,27 @@ const BackIcon = () => (
   />
 );
 
+
+const PaperStack = () => (
+  <Image
+    source={require('./assets/splash-paperstack.png')}
+    style={{ width: 175, height: 175, position: 'absolute', top: 10, left: -30 }}
+  />
+);
+
+const Cursor = () => (
+  <Image
+    source={require('./assets/splash-pinkpaper.png')}
+    style={{ width: 100, height: 100, position: 'absolute', top: 205, right: -10 }}
+  />
+);
+
+const BellIcon = () => (
+  <Image
+    source={require('./assets/bell-icon.png')}
+    style={{ width: 80, height: 89 }}
+  />
+);
 // Icons - you need to add these icon files to your assets
 // For now using require, but you can replace with your actual icon imports
 const getNotificationIcon = type => {
@@ -33,6 +54,8 @@ const getNotificationIcon = type => {
     switch (type) {
       case 'promo':
         return require('./assets/icon-promo.png');
+      case 'new_product':
+        return require('./assets/icon-product.png');
       case 'order_status':
         return require('./assets/icon-order.png');
       case 'payment':
@@ -123,19 +146,39 @@ export default function NotificationScreen({ navigation }) {
     }
   };
 
+  // Function to remove emojis from text
+  const removeEmojis = (text) => {
+    if (!text) return text;
+    // Remove emoji characters using regex
+    return text.replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+  };
+
   // Format notifications for display
   const formatNotifications = notifs => {
     return notifs.map(notif => {
       let actionButton = null;
-      let badge = null;
 
       switch (notif.type) {
         case 'promo':
-          badge = { text: notif.data?.discount || 'Promo', color: '#FF272D' };
           actionButton = {
             label: 'Lihat Promo',
             onPress: () =>
               navigation.navigate('Promo', { promoId: notif.data?.promoId }),
+          };
+          break;
+        case 'new_product':
+          actionButton = {
+            label: 'Lihat Produk',
+            onPress: () =>
+              navigation.navigate('ProductDetailScreen', { 
+                productId: notif.data?.productId,
+                product: {
+                  id: notif.data?.productId,
+                  title: notif.data?.productName,
+                  price: notif.data?.price,
+                  category: notif.data?.category
+                }
+              }),
           };
           break;
         case 'order_status':
@@ -148,10 +191,6 @@ export default function NotificationScreen({ navigation }) {
           };
           break;
         case 'payment':
-          badge = {
-            text: notif.data?.amount || 'Pembayaran',
-            color: '#00B69B',
-          };
           actionButton = {
             label: 'Lihat Pembayaran',
             onPress: () =>
@@ -166,30 +205,15 @@ export default function NotificationScreen({ navigation }) {
 
       return {
         id: notif.id,
-        type: getTypeDisplayName(notif.type),
+        type: notif.type,
         icon: getNotificationIcon(notif.type),
-        title: notif.title,
+        title: removeEmojis(notif.title),
         description: notif.body,
         time: formatTime(notif.createdAt || notif.timestamp),
         action: actionButton,
-        badge,
         isRead: notif.isRead,
       };
     });
-  };
-
-  // Get display name for notification type
-  const getTypeDisplayName = type => {
-    switch (type) {
-      case 'promo':
-        return 'Promosi';
-      case 'order_status':
-        return 'Pesanan';
-      case 'payment':
-        return 'Pembayaran';
-      default:
-        return 'Produk Baru';
-    }
   };
 
   // Format time display
@@ -215,7 +239,17 @@ export default function NotificationScreen({ navigation }) {
   // Filter notifications based on active tab
   const filteredNotifications = notifications.filter(notif => {
     if (activeTab === 'Semua') return true;
-    return notif.type === activeTab;
+    
+    // Map tab names to notification types
+    const tabTypeMap = {
+      'Produk Baru': 'new_product',
+      'Pesanan': 'order_status', 
+      'Promosi': 'promo',
+      'Pembayaran': 'payment'
+    };
+    
+    const targetType = tabTypeMap[activeTab] || activeTab;
+    return notif.type === targetType;
   });
 
   // Mark notification as read
@@ -339,11 +373,22 @@ export default function NotificationScreen({ navigation }) {
         {/* Empty State */}
         {filteredNotifications.length === 0 && !loading && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Belum ada notifikasi</Text>
-            <Text style={styles.emptyDesc}>
-              Notifikasi akan muncul di sini ketika ada informasi terbaru untuk
-              Anda
-            </Text>
+            {/* Background Assets */}
+            <View style={styles.emptyStateContainer}>
+              <PaperStack />
+              <Cursor />
+
+              {/* Center Content */}
+              <View style={styles.emptyStateContent}>
+                <View style={styles.bellIconContainer}>
+                  <BellIcon />
+                </View>
+                <Text style={styles.emptyTitle}>Belum Ada Notifikasi</Text>
+                <Text style={styles.emptyDesc}>
+                  Notifikasi terkait pesanan, promo, update produk terbaru, dan pesan dari admin akan muncul disini
+                </Text>
+              </View>
+            </View>
           </View>
         )}
 
@@ -384,26 +429,6 @@ export default function NotificationScreen({ navigation }) {
               </TouchableOpacity>
             )}
 
-            {item.badge && (
-              <View
-                style={[
-                  item.badge.color === '#00B69B'
-                    ? styles.amountBox
-                    : styles.promoBox,
-                ]}
-              >
-                <Text
-                  style={[
-                    item.badge.color === '#00B69B'
-                      ? styles.amountText
-                      : styles.promoText,
-                  ]}
-                >
-                  {item.badge.text}
-                </Text>
-              </View>
-            )}
-
             <View style={styles.notifDivider} />
           </TouchableOpacity>
         ))}
@@ -416,7 +441,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 73,
+    marginTop: 10,
     marginBottom: 31,
     paddingHorizontal: 18,
     justifyContent: 'center',
@@ -467,24 +492,42 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   emptyState: {
+    flex: 1,
+    paddingVertical: 80,
+    paddingHorizontal: 30,
+    minHeight: 400,
+  },
+  emptyStateContainer: {
+    position: 'relative',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 40,
+    zIndex: 10,
+    paddingHorizontal: 20,
+  },
+  bellIconContainer: {
+    width: '100%',
+    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: {
-    fontFamily: FontFamily.outfit_semibold,
-    fontWeight: FontWeight.semibold,
-    fontSize: 18,
-    color: '#112D4E',
+    fontFamily: FontFamily.outfit_regular,
+    fontWeight: FontWeight.regular,
+    fontSize: 26,
+    color: '#0070D8',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptyDesc: {
-    fontFamily: FontFamily.outfit_regular,
-    fontWeight: FontWeight.regular,
+    fontFamily: FontFamily.outfit_light,
+    fontWeight: FontWeight.light,
     fontSize: 14,
-    color: '#717182',
+    color: '#0070D8',
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -502,8 +545,9 @@ const styles = StyleSheet.create({
     borderLeftColor: '#0070D8',
   },
   notifIcon: {
-    width: 26,
-    height: 26,
+    width: 30,
+    height: 30,
+    resizeMode: 'contain',
     marginRight: 10,
   },
   notifTitle: {
@@ -513,6 +557,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginRight: 8,
     flex: 1,
+    marginTop: 9,
   },
   notifTitleUnread: {
     fontWeight: FontWeight.semibold,
@@ -524,6 +569,7 @@ const styles = StyleSheet.create({
     color: '#717182',
     fontSize: 12,
     marginLeft: 8,
+    marginTop: 9,
   },
   unreadDot: {
     width: 8,
@@ -555,38 +601,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.outfit_medium,
     fontWeight: FontWeight.medium,
     color: '#0070D8',
-    fontSize: 12,
-  },
-  amountBox: {
-    alignSelf: 'flex-start',
-    borderWidth: 1.5,
-    borderColor: '#00B69B',
-    borderRadius: 500,
-    paddingHorizontal: 13,
-    paddingVertical: 3,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  amountText: {
-    fontFamily: FontFamily.outfit_medium,
-    fontWeight: FontWeight.medium,
-    color: '#00B69B',
-    fontSize: 12,
-  },
-  promoBox: {
-    alignSelf: 'flex-start',
-    borderWidth: 1.5,
-    borderColor: '#FF272D',
-    borderRadius: 500,
-    paddingHorizontal: 13,
-    paddingVertical: 3,
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  promoText: {
-    fontFamily: FontFamily.outfit_medium,
-    fontWeight: FontWeight.medium,
-    color: '#FF272D',
     fontSize: 12,
   },
   notifDivider: {

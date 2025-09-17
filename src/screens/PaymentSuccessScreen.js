@@ -7,9 +7,11 @@ import {
   SafeAreaView,
   Dimensions,
   Alert,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ApiService from '../services/api';
+import { FontWeight, FontFamily } from '../styles/typography';
 
 const { width } = Dimensions.get('window');
 
@@ -97,9 +99,20 @@ export default function PaymentSuccessScreen({ navigation, route }) {
   };
 
   // Use received data or fallback to default
-  const productName = product?.nama || product?.title || 'Aplikasi Absensi';
-  const price = product?.harga
-    ? `Rp ${parseInt(product.harga).toLocaleString('id-ID')}`
+  console.log('🔍 Product data received:', product);
+  console.log('🔍 OrderData received:', orderData);
+  
+  // Get product name with priority: nama > title > itemDetails.name > fallback
+  const productName = product?.nama || 
+                     product?.title || 
+                     product?.name ||
+                     orderData?.itemDetails?.[0]?.name ||
+                     'Aplikasi Absensi';
+                     
+  const price = product?.harga || product?.price
+    ? `Rp ${parseInt(product.harga || product.price).toLocaleString('id-ID')}`
+    : orderData?.grossAmount 
+    ? `Rp ${parseInt(orderData.grossAmount).toLocaleString('id-ID')}`
     : 'Rp 2.000.000';
   const paymentMethod = orderData?.payment_type || 'Kartu Kredit/Debit';
   const date = new Date().toLocaleDateString('id-ID', {
@@ -119,12 +132,24 @@ export default function PaymentSuccessScreen({ navigation, route }) {
       <View style={styles.container}>
         <Text style={styles.infoTitle}>Info Pembayaran</Text>
 
-        <View style={styles.ticketBox}>
-          {/* Circle Check */}
-          <View style={styles.checkCircle}>
-            <Text style={styles.checkIcon}>✓</Text>
+        {/* Payment Success Background Image */}
+        <Image 
+          source={require('./assets/payment-success.png')} 
+          style={styles.paymentSuccessImage}
+        />
+        
+        <View style={styles.contentOverlay}>
+          {/* Check Success Icon with Double Circle Background */}
+          <View style={styles.outerCircleContainer}>
+            <View style={styles.checkIconContainer}>
+              <Image 
+                source={require('./assets/check-success.png')} 
+                style={styles.checkSuccessIcon}
+              />
+            </View>
           </View>
-          {/* Text */}
+          
+          {/* Text Content */}
           <Text style={styles.successTitle}>Pembayaran Berhasil</Text>
           <Text style={styles.productLabel}>Produk - {productName}</Text>
           <Text style={styles.amount}>{price}</Text>
@@ -168,69 +193,90 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: 100,
   },
   infoTitle: {
+    fontFamily: FontFamily.outfit_semibold,
+    fontWeight: FontWeight.semibold,
     color: '#fff',
     fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 28,
+    marginBottom: 40,
     textAlign: 'center',
+    letterSpacing: -0.96,
+    lineHeight: 22,
   },
-  ticketBox: {
+  // Styling untuk payment success image
+  paymentSuccessImage: {
     width: width - 36,
-    backgroundColor: '#fff',
-    borderRadius: 40,
-    paddingTop: 30,
-    paddingBottom: 34,
-    alignItems: 'center',
+    height: 400, // Adjust height based on your image
+    resizeMode: 'contain',
+    alignSelf: 'center',
     marginBottom: 32,
-    // Decorative border for bottom
-    shadowColor: '#0072DF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 18,
-    elevation: 3,
-    position: 'relative',
-    overflow: 'visible',
   },
-  checkCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#E3F1FE',
+  contentOverlay: {
+    position: 'absolute',
+    top: 190, // Adjust position based on your image
+    left: 18,
+    right: 18,
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+  },
+  outerCircleContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 60, // Makes it a perfect circle
+    backgroundColor: '#E3EFF8',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 18,
   },
-  checkIcon: {
-    fontSize: 46,
-    color: '#1976D2',
-    fontWeight: 'bold',
+  checkIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25, // Makes it a perfect circle (updated for smaller size)
+    backgroundColor: '#0070D8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkSuccessIcon: {
+    width: 26.01,
+    height: 19,
+    resizeMode: 'contain',
   },
   successTitle: {
-    fontSize: 26,
-    color: '#111',
-    fontWeight: 'bold',
-    marginBottom: 2,
+    fontFamily: FontFamily.outfit_semibold,
+    fontWeight: FontWeight.semibold,
+    color: '#fff',
+    fontSize: 24,
+    color: '#000',
+    marginBottom:2,
     textAlign: 'center',
+    letterSpacing: -0.96,
+    lineHeight: 25,
   },
   productLabel: {
-    fontSize: 19,
-    color: '#111',
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    fontSize: 17,
+    color: '#000',
     marginBottom: 10,
     textAlign: 'center',
+    letterSpacing: -0.96,
+    lineHeight: 25,
   },
   amount: {
+    fontFamily: FontFamily.outfit_semibold,
+    fontWeight: FontWeight.semibold,
     fontSize: 23,
-    fontWeight: 'bold',
-    color: '#111',
+    color: '#000',
     marginBottom: 18,
     textAlign: 'center',
+    letterSpacing: -0.96,
+    lineHeight: 25,
   },
   dashedLine: {
     borderBottomWidth: 1.5,
-    borderColor: '#1976D2',
+    borderColor: '#0070D8',
     borderStyle: 'dashed',
     width: '95%',
     marginVertical: 14,
@@ -242,13 +288,20 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   paymentLabel: {
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
     fontSize: 17,
-    color: '#666',
+    color: '#646464',
+    letterSpacing: -0.96,
+    lineHeight: 25,
   },
   paymentValue: {
+    fontFamily: FontFamily.regular,
+    fontWeight: FontWeight.regular,
     fontSize: 17,
-    color: '#222',
-    fontWeight: '500',
+    color: '#000',
+    letterSpacing: -0.96,
+    lineHeight: 25,
   },
   doneBtn: {
     backgroundColor: '#fff',
@@ -259,8 +312,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   doneBtnText: {
-    color: '#0072DF',
+    fontFamily: FontFamily.outfit_medium,
+    fontWeight: FontWeight.medium,
+    backgroundColor: '#fff',
+    color: '#0070D8',
     fontSize: 20,
-    fontWeight: 'bold',
+    letterSpacing: -0.96,
+    lineHeight: 25,
   },
 });

@@ -11,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Linking,
+  Dimensions,
 } from 'react-native';
 import io from 'socket.io-client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -55,7 +57,10 @@ export default function ChatScreen({ navigation }) {
       setAdminUser(admin);
 
       // Initialize socket connection
-      const newSocket = io('http://192.168.1.11:5000', {
+      const socketUrl = Platform.OS === 'android' 
+        ? 'http://10.0.2.2:5000' 
+        : 'http://localhost:5000';
+      const newSocket = io(socketUrl, {
         forceNew: true,
         transports: ['websocket'],
       });
@@ -114,8 +119,11 @@ export default function ChatScreen({ navigation }) {
   const loadChatHistory = async (userId, adminId) => {
     try {
       setLoading(true);
+      const apiUrl = Platform.OS === 'android' 
+        ? 'http://10.0.2.2:5000' 
+        : 'http://localhost:5000';
       const response = await fetch(
-        `http://192.168.1.11:5000/api/chat/history/${userId}/${adminId}`,
+        `${apiUrl}/api/chat/history/${userId}/${adminId}`,
       );
       const data = await response.json();
 
@@ -170,8 +178,52 @@ export default function ChatScreen({ navigation }) {
       .padStart(2, '0')}`;
   };
 
+  // Function to check if message is a file/image
+  const isFileMessage = (message) => {
+    return message.messageType === 'file' ||
+           (typeof message.message === 'string' &&
+            (message.message.startsWith('/uploads/') ||
+             message.message.includes('/uploads/chat/')));
+  };
+
+  // Function to get file URL
+  const getFileUrl = (message) => {
+    const baseUrl = 'http://10.0.2.2:5000'; // Backend URL
+    if (message.message.startsWith('http')) {
+      return message.message;
+    }
+    return `${baseUrl}${message.message}`;
+  };
+
+  // Function to check if file is an image
+  const isImageFile = (message) => {
+    const fileName = message.fileName || message.message;
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+    return imageExtensions.some(ext =>
+      fileName.toLowerCase().includes(ext)
+    ) || (message.fileType && message.fileType.startsWith('image/'));
+  };
+
+  // Function to get file name from path
+  const getFileName = (message) => {
+    if (message.fileName) {
+      return message.fileName;
+    }
+    const path = message.message;
+    return path.split('/').pop() || 'File';
+  };
+
+  // Function to open file
+  const openFile = (fileUrl) => {
+    Linking.openURL(fileUrl).catch(err => {
+      console.error('Error opening file:', err);
+      Alert.alert('Error', 'Tidak dapat membuka file');
+    });
+  };
+
   const renderMessage = ({ item }) => {
     const isMyMessage = item.senderId === currentUser?.id;
+    const isFile = isFileMessage(item);
 
     return (
       <View
@@ -186,14 +238,67 @@ export default function ChatScreen({ navigation }) {
             isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble,
           ]}
         >
-          <Text
-            style={[
-              styles.messageText,
-              isMyMessage ? styles.myMessageText : styles.otherMessageText,
-            ]}
-          >
-            {item.message}
-          </Text>
+          {isFile ? (
+            // Render file/image message
+            <View style={styles.fileMessageContainer}>
+              {isImageFile(item) ? (
+                // Render image
+                <TouchableOpacity
+                  onPress={() => openFile(getFileUrl(item))}
+                  style={styles.imageContainer}
+                >
+                  <Image
+                    source={{ uri: getFileUrl(item) }}
+                    style={styles.messageImage}
+                    resizeMode="cover"
+                  />
+                  <Text style={[
+                    styles.fileNameText,
+                    isMyMessage ? styles.myFileNameText : styles.otherFileNameText
+                  ]}>
+                    {getFileName(item)}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                // Render file
+                <TouchableOpacity
+                  onPress={() => openFile(getFileUrl(item))}
+                  style={[
+                    styles.fileContainer,
+                    isMyMessage ? styles.myFileContainer : styles.otherFileContainer
+                  ]}
+                >
+                  <View style={styles.fileIcon}>
+                    <Text style={styles.fileIconText}>📄</Text>
+                  </View>
+                  <View style={styles.fileInfo}>
+                    <Text style={[
+                      styles.fileNameText,
+                      isMyMessage ? styles.myFileNameText : styles.otherFileNameText
+                    ]}>
+                      {getFileName(item)}
+                    </Text>
+                    <Text style={[
+                      styles.fileActionText,
+                      isMyMessage ? styles.myFileActionText : styles.otherFileActionText
+                    ]}>
+                      Tap untuk membuka
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            // Render text message
+            <Text
+              style={[
+                styles.messageText,
+                isMyMessage ? styles.myMessageText : styles.otherMessageText,
+              ]}
+            >
+              {item.message}
+            </Text>
+          )}
           <Text
             style={[
               styles.timeText,
@@ -430,5 +535,67 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  // File and Image Message Styles
+  fileMessageContainer: {
+    marginBottom: 4,
+  },
+  imageContainer: {
+    alignItems: 'center',
+  },
+  messageImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  fileContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 8,
+    minWidth: 150,
+  },
+  myFileContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  otherFileContainer: {
+    backgroundColor: '#f0f0f0',
+  },
+  fileIcon: {
+    width: 40,
+    height: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  fileIconText: {
+    fontSize: 20,
+  },
+  fileInfo: {
+    flex: 1,
+  },
+  fileNameText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  myFileNameText: {
+    color: 'white',
+  },
+  otherFileNameText: {
+    color: '#333',
+  },
+  fileActionText: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  myFileActionText: {
+    color: 'white',
+  },
+  otherFileActionText: {
+    color: '#666',
   },
 });

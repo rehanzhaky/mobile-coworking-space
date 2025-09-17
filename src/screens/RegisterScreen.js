@@ -15,6 +15,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import { TextStyles, FontFamily, FontWeight } from '../styles/typography';
 import ApiService from '../services/api';
+import GoogleAuthService from '../services/googleAuth';
 
 // Custom icons for register form - using fallback to existing icon for now
 const UserIcon = () => {
@@ -86,6 +87,7 @@ export default function RegisterScreen({ navigation }) {
   const [securePass, setSecurePass] = useState(true);
   const [secureRePass, setSecureRePass] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const validateForm = () => {
     if (!username.trim()) {
@@ -178,6 +180,56 @@ export default function RegisterScreen({ navigation }) {
     } finally {
       console.log('Registration process completed');
       setLoading(false);
+    }
+  };
+
+  const handleGoogleRegister = async () => {
+    setGoogleLoading(true);
+    
+    try {
+      const result = await GoogleAuthService.signIn();
+      
+      if (result.success) {
+        // Tampilkan pesan sukses dan arahkan ke halaman login dengan email yang sudah dipilih
+        Alert.alert(
+          'Berhasil!',
+          `Akun Google Anda telah berhasil terdaftar dengan email ${result.user?.email || 'yang dipilih'}.\n\nAnda sekarang dapat masuk menggunakan tombol "Masuk dengan Google" di halaman login.`,
+          [
+            {
+              text: 'Lanjut ke Login',
+              onPress: () => {
+                // Arahkan ke LoginScreen dan pass email yang sudah dipilih
+                navigation?.navigate('Login', { 
+                  googleEmail: result.user?.email,
+                  registrationSuccess: true 
+                });
+              },
+            },
+          ],
+        );
+      } else {
+        // Handle DEVELOPER_ERROR with user-friendly message
+        if (result.error?.includes('DEVELOPER_ERROR') || result.error?.includes('Unable to sign in')) {
+          Alert.alert(
+            'Informasi',
+            'Saat ini terjadi masalah konfigurasi Google Sign-In. Anda masih bisa mendaftar menggunakan email dan password.',
+            [
+              { text: 'OK', style: 'default' }
+            ]
+          );
+        } else {
+          Alert.alert('Error', result.error || 'Gagal melakukan registrasi dengan Google');
+        }
+      }
+    } catch (error) {
+      console.error('Google registration error:', error);
+      Alert.alert(
+        'Informasi', 
+        'Saat ini Google Sign-In tidak tersedia. Silakan gunakan pendaftaran dengan email dan password.',
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -292,15 +344,25 @@ export default function RegisterScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.orText}>Atau masuk dengan</Text>
+                <Text style={styles.orText}>Atau daftar dengan</Text>
 
                 {/* Google Button */}
-                <TouchableOpacity style={styles.googleBtn}>
-                  <Image
-                    source={require('./assets/google-icon.png')}
-                    style={{ width: 20, height: 20, marginRight: 10 }}
-                  />
-                  <Text style={styles.googleBtnText}>Masuk dengan Google</Text>
+                <TouchableOpacity 
+                  style={[styles.googleBtn, googleLoading && styles.disabledButton]}
+                  onPress={handleGoogleRegister}
+                  disabled={googleLoading}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color="#4285F4" size="small" />
+                  ) : (
+                    <Image
+                      source={require('./assets/google-icon.png')}
+                      style={{ width: 20, height: 20, marginRight: 10 }}
+                    />
+                  )}
+                  <Text style={styles.googleBtnText}>
+                    {googleLoading ? 'Mendaftar...' : 'Daftar dengan Google'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -441,6 +503,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     justifyContent: 'center',
     marginTop: 4,
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   googleBtnText: {
     fontSize: 18,
